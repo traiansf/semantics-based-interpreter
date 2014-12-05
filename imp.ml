@@ -12,7 +12,6 @@ type e =                              (* e ::=                   *)
   | Secv of e * e                     (*   | e ; e               *)
   | While of e * e                    (*   | while e do e        *)
 
-
 (* The state is a list of pairs (location,integer) *)
 type state = (l * int) list
 
@@ -83,56 +82,62 @@ let rec evaluate c = match reduce c with
   | Some c' -> evaluate c'
 
 
+(****************************************************
+        Types and Type Inference
+*****************************************************)
+
+(* types of expressions *)
+type tip = TInt | TBool | TUnit
+
+(* types of locations *)
+type tipL = TIntRef
+
+(* Type Environment *)
+type mediuTip = (l*tipL) list
+
+(* Type inference function *)
+let rec infertype m = function
+  | Int n -> Some TInt
+  | Bool b -> Some TBool
+  | Op(e1,Plus,e2) -> (match (infertype m e1, infertype m e2) with
+     | (Some TInt, Some TInt) -> Some TInt
+     | _ -> None)
+  | Op(e1,Mic,e2) -> (match (infertype m e1, infertype m e2) with
+     | (Some TInt, Some TInt) -> Some TBool
+     | _ -> None)
+  | If(e1,e2,e3) -> (match (infertype m e1, infertype m e2, infertype m e3) with
+     | (Some TBool, Some t, Some t') when t=t' -> Some t
+     | _ -> None)
+  | Loc l -> (match lookup l m with
+     | Some TIntRef -> Some TInt
+     | _ -> None)
+  | Atrib(l,e) -> (match (lookup l m, infertype m e) with
+     | (Some TIntRef, Some TInt) -> Some TUnit
+     | _ -> None)
+  | Skip -> Some TUnit
+  | Secv (e1,e2) -> (match (infertype m e1) with
+     | Some TUnit -> infertype m e2
+     | _ -> None)
+  | While (e1,e2) -> (match (infertype m e1, infertype m e2) with
+     | (Some TBool, Some TUnit) -> Some TUnit
+     | _ -> None)
+
+
+(***********************************************************
+   Test Program
+************************************************************)
+
 let test_pgm = Secv(Atrib("y", Int 0),
                     While(Op(Int 1,Mic, Loc "x"),
                           Secv(Atrib("y", Op(Loc "y", Plus, Loc "x")), 
                                Atrib("x", Op(Loc "x", Plus, Int (-1))))))
 
-
 let test_config n = (test_pgm,[("x",n);("y", 0)])
 
-(*
-   z := 0 ;
-    while 1 <= !x do 
-      z := !z + !y;   
-      x := !x + -1
-    done
-*)
+let rec gamma_of_s = function
+  | [] -> []
+  | (l,v)::t -> (l,TIntRef)::gamma_of_s t
 
-let inmulteste_pgm = Secv(Atrib("z", Int 0),
-                          While(Op(Int 1, Mic, Loc "x"),
-                                Secv(Atrib("z",Op(Loc "z", Plus, Loc "y")),
-                                     Atrib("x",Op(Loc "x", Plus, Int (-1))))))
-
-let inmulteste_config m n = (inmulteste_pgm, [("x",m);("y",n);("z",0)])
-
-(*
-  n!
-
-  f := !n ;
-  while 2 <= !n do
-    n := !n + -1;
-    x := !n;
-    y := !f;
-    z := 0 ;
-    while 1 <= !x do 
-      z := !z + !y;   
-      x := !x + -1
-    done ;
-    f := !z
-  done
-*)
-
-let fact_pgm = 
-  Secv(Atrib("f", Loc "n"),
-  Secv(While(Op(Int 2, Mic, Loc "n"),
-        Secv(Atrib("n", Op(Loc "n", Plus, Int (-1))),
-        Secv(Atrib("x", Loc "n"),
-        Secv(Atrib("y", Loc "f"),
-        Secv(inmulteste_pgm,
-             Atrib("f", Loc "z")
-             ))))),
-      Loc "f"))
-
-let fact_config n = (fact_pgm, [("n",n);("f",0);("x",0);("y",0);("z",0)])
-
+let type_and_run (p,s) = match infertype (gamma_of_s s) p with
+  | None -> failwith "Eroare de tip!  Verificati programul"
+  | Some t -> evaluate (p,s)
