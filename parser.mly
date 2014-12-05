@@ -19,16 +19,19 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token SEQ SKIP
 %token IF THEN ELSE
 %token WHILE DO DONE
-%token LTE
+%token FOR
+%token LTE EQ
 %token ASGNOP DEREF
-%token PLUS
+%token PLUS MINUS MUL DIV
 %token LPAREN RPAREN
 %token EOF
 %right SEQ /* lowest precedence */
+%nonassoc FORX
 %nonassoc IFX
-%nonassoc LTE
+%nonassoc LTE EQ
 %right ASGNOP
-%left PLUS
+%left PLUS MINUS
+%left MUL DIV
 %nonassoc DEREF       /* highest precedence */
 %start main             /* the entry point */
 %type <ImpAST.expr> main
@@ -43,12 +46,18 @@ expr:
   | SKIP                       { Skip (location()) }
   | LPAREN expr RPAREN         { $2 }
   | expr PLUS expr             { Op ($1,Plus,$3, location()) }
+  | expr MINUS expr             { Op ($1,Minus,$3, location()) }
+  | expr MUL expr             { Op ($1,Mul,$3, location()) }
+  | expr DIV expr             { Op ($1,Div,$3, location()) }
   | DEREF LOC                  { Loc ($2, location()) }
   | LOC ASGNOP expr            { Atrib ($1,$3, location()) }
   | expr LTE expr              { Op ($1, Mic, $3, location()) }
+  | expr EQ expr              { Op ($1, Egal, $3, location()) }
   | expr SEQ expr              { Secv ($1,$3, location()) }
   | IF expr THEN expr ELSE expr %prec IFX
                                { If ($2, $4, $6, location()) }
   | WHILE expr DO expr DONE    { While ($2, $4, location()) }
+  | FOR LPAREN expr SEQ expr SEQ expr RPAREN expr %prec FORX
+                               { For ($3, $5, $7, $9, location()) }
   | error                      { parseError (location ()) }
 ;

@@ -35,6 +35,7 @@ let keyword_table = Hashtbl.create 20
    ( "while"        , WHILE );
    ( "do"           , DO );
    ( "done"         , DONE );
+   ( "for"          , FOR );
    ( "true"         , TRUE );
    ( "false"        , FALSE );
    ( "skip"         , SKIP )]
@@ -46,7 +47,11 @@ rule token = parse
   | [' ' '\t' '\r' ]     { token lexbuf }     (* skip blanks *)
   | ['-']?['0'-'9']+ as lxm { INT(int_of_string lxm) }
   | '+'            { PLUS }
+  | '-'            { MINUS }
+  | '*'            { MUL }
+  | '/'            { DIV }
   | "<="           { LTE }
+  | "=="           { EQ }
   | '('            { LPAREN }
   | ')'            { RPAREN }
   | ":="           { ASGNOP }

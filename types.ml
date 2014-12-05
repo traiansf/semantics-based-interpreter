@@ -19,12 +19,17 @@ exception LocError of string*locatie
 let rec infertype m = function
   | Int (n,_) -> TInt
   | Bool (b,_) -> TBool
-  | Op(e1,Plus,e2,_)
+  | Op(e1,Plus,e2,_) 
+  | Op(e1,Minus,e2,_) 
+  | Op(e1,Mul,e2,_) 
+  | Op(e1,Div,e2,_) 
     -> (match (infertype m e1, infertype m e2) with
      | (TInt, TInt) -> TInt
      | (TInt, t) -> raise (TypeError (e2, TInt, t))
      | (t,_) -> raise (TypeError (e1, TInt, t)))
-  | Op(e1,Mic,e2,_) -> (match (infertype m e1, infertype m e2) with
+  | Op(e1,Mic,e2,_) 
+  | Op(e1,Egal,e2,_) 
+    -> (match (infertype m e1, infertype m e2) with
      | (TInt, TInt) -> TBool
      | (TInt, t) -> raise (TypeError (e2, TInt, t))
      | (t,_) -> raise (TypeError (e1, TInt, t)))
@@ -42,10 +47,17 @@ let rec infertype m = function
   | Secv (e1,e2,_) -> (match (infertype m e1, infertype m e2) with
      | (TUnit,t) -> t
      | (t1,_) -> raise (TypeError (e1, TUnit, t1)))
-  | While (e1,e2,_) -> (match (infertype m e1, infertype m e2) with
+  | While (cond,body,_) -> (match (infertype m cond, infertype m body) with
      | (TBool, TUnit) -> TUnit
-     | (TBool, t) -> raise (TypeError (e2, TUnit, t))
-     | (t,_) -> raise (TypeError (e1, TBool, t)))
+     | (TBool, t) -> raise (TypeError (body, TUnit, t))
+     | (t,_) -> raise (TypeError (cond, TBool, t)))
+  | For (init,cond,incr,body,_) 
+    -> (match (infertype m init, infertype m cond, infertype m incr, infertype m body) with
+     | (TUnit, TBool, TUnit, TUnit) -> TUnit
+     | (TUnit, TBool, TUnit, t) -> raise (TypeError (body, TUnit, t))
+     | (TUnit, TBool, t, _) -> raise (TypeError (incr, TUnit, t))
+     | (TUnit, t, _, _) -> raise (TypeError (cond, TBool, t))
+     | (t, _, _, _) -> raise (TypeError (init, TUnit, t)))
 
 
 let type_check m e = try

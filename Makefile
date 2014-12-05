@@ -15,10 +15,13 @@ opt:
 	ocamlopt -c imp.ml
 	ocamlopt -o imp-opt impAST.cmx lexer.cmx parser.cmx mem.cmx semantics.cmx types.cmx imp.cmx
 
+mem.cmo: impAST.cmo
+	ocamlc -c mem.ml
+
 lexer.ml: lexer.mll parser.cmi
 	ocamllex lexer.mll
 
-parser.ml: parser.mly
+parser.ml: parser.mly impAST.cmo
 	ocamlyacc parser.mly
 
 parser.cmi: parser.ml
@@ -30,7 +33,7 @@ types.cmo: types.ml mem.cmo impAST.cmo
 semantics.cmo: semantics.ml mem.cmo impAST.cmo
 	ocamlc -c semantics.ml
 
-imp.cmo: imp.ml semantics.cmo types.cmo
+imp.cmo: imp.ml semantics.cmo types.cmo lexer.ml
 	ocamlc -c imp.ml
 
 %.cmo: %.ml
