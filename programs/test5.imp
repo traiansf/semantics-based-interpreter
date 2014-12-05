@@ -1,4 +1,4 @@
-n := 100;
-if (!n <= 100) then skip else
-  y := !y + !x ;
-n := !n + -1
+ln := 100;
+if (!ln <= 100) then () else
+  ly := !ly + !lx ;
+ln := !ln + -1
