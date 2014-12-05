@@ -45,6 +45,7 @@ let keyword_table = Hashtbl.create 20
    ( "for"          , FOR );
    ( "true"         , TRUE );
    ( "false"        , FALSE );
+   ( "Z"            , Z);
 ]
 
 }

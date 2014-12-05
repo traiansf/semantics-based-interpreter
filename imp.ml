@@ -19,10 +19,11 @@ let type_and_run debug pgm =
   let locs = ImpAST.locations pgm in
       if (type_check  (init_mtype locs) pgm) then begin
           Printf.printf "The program typechecks. Executing..." ;
+          if debug then print_newline () else () ;
           flush stdout ;
           let final = (Semantics.evaluate debug (pgm,init_mem locs)) in
-            Printf.printf " done.\n Final configuration:\n\n  %s\n\n" 
-                  (Semantics.string_of_config final) 
+            Printf.printf " done.\n Final configuration:\n\n  %s\n\n"
+                  (Semantics.string_of_config final)
       end else ()
 
 
@@ -31,10 +32,10 @@ let cin () =
       then open_in Sys.argv.(1)
       else failwith "please specify program file"
 
-let _ = 
+let _ =
   let lexbuf = Lexing.from_channel (cin ()) in
     lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = Sys.argv.(1) };
-    try 
+    try
       let pgm = Parser.main Lexer.token lexbuf in
        type_and_run (Array.length Sys.argv > 2) pgm
     with

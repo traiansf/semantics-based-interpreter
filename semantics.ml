@@ -60,17 +60,28 @@ let rec reduce = function
     -> Some (Int (int_of_float f, loc), s)
   | (App (FloatOfInt _, Int (n,_), loc), s)
     -> Some (Float (float_of_int n, loc), s)
+  | (App (App(Z loc, g, loc1), v, loc2), s)
+    -> Some (App (App (g, App(Z loc, g, loc),loc1), v, loc2), s)
   | (App (Fun(x,_,e1,_),e2,_),s) when is_val e2 -> Some (subst x e2 e1, s)
-  | (App (e1, e2, loc), s) when is_fun e1 ->
-      (match reduce (e2,s) 
-       with Some (e2',s') -> Some (App(e1,e2',loc),s')
-          | None -> None
-      )
+  | (App (e1, e2, loc), s) when is_fun e1
+     -> (match reduce (e2,s) with Some (e2',s') -> Some (App(e1,e2',loc),s')
+      | None -> None)
+  | (App (e1, e2, loc), s) 
+     -> (match reduce (e1,s) with Some (e1',s') -> Some (App(e1',e2,loc),s')
+      | None -> None)
+
+(*  Normal Order
+  | (App (Fun(x,_,e1,_),e2,_),s) -> Some (subst x e2 e1, s)
+  | (App (App(Z loc, g, loc1), v, loc2), s)
+    -> Some (App (App (g, App(Z loc, g, loc),loc1), v, loc2), s)
   | (App (e1, e2, loc), s) ->
-      (match reduce (e1,s) 
-       with Some (e1',s') -> Some (App(e1',e2,loc),s')
-          | None -> None
-      )
+    (match reduce (e1,s) with Some (e1',s') -> Some (App(e1',e2,loc),s')
+      | None -> (match reduce (e2,s) with Some (e2',s') -> Some (App(e1,e2',loc),s')
+      | None -> None))
+   | (Fun (x,t,e,loc),s) ->
+    (match reduce (e,s) with Some (e',s') -> Some (Fun (x,t,e',loc),s') 
+      | None -> None)
+*)
   | _ -> None                                                    (*default*)
 
 
@@ -80,8 +91,8 @@ let string_of_config (p,m) = "<" ^ string_of_expr p ^ ", {" ^ string_of_mem m ^ 
    one step reduction relation. *)
 let rec evaluate debug c = match (reduce c) with
   | Some c' -> if debug 
-                 then Printf.printf "%s\n" (string_of_config c) 
-                 else () ; 
+               then Printf.printf "%s\n" (string_of_config c) 
+               else () ; 
                evaluate debug c'
   | None -> c
 
