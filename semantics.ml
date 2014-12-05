@@ -6,7 +6,7 @@ let is_fun = function
   | _ -> false
 
 let is_val = function
-  | Bool _ | Int _ | Float _ | Skip _ -> true
+  | Bool _ | Int _ | Float _ | Loc _ | Skip _ -> true
   | e -> is_fun e
 
 let rec reduce = function
@@ -36,13 +36,28 @@ let rec reduce = function
   | (Op(e1,op,e2,loc),s) ->                                            (*OpS*)
     (match reduce (e1,s) with Some (e1',s') -> Some (Op(e1',op,e2,loc),s')
       | None -> None)
-  | (Loc (l,loc), s) -> Some (lookup l s, s)                    (*Loc*)
-  | (Atrib(l, Float (f,loc),loc'),s) ->                                         (*Atrib*)
-      Some (Skip loc', update (l, Float (f, loc)) s)
-  | (Atrib(l, Int (n,loc),loc'),s) ->                                         (*Atrib*)
-      Some (Skip loc', update (l, Int (n, loc)) s)
-  | (Atrib(l,e,loc),s) ->                                          (*AtribD*)
-    (match reduce (e,s) with Some (e',s') -> Some (Atrib(l,e',loc),s')
+  | (Deref (Loc (l,_), loc), s) -> Some (lookup l s, s)               (*Deref*)
+  | (Deref (e, loc), s) ->                     (*DerefS*)
+    (match reduce (e,s) with Some (e',s') -> Some (Deref(e',loc),s')
+      | None -> None)
+
+  | (Ref (v,loc), s) when is_val v ->            (*Ref*)
+    let (l,s') = mem_add v s 
+    in Some (Loc (l,loc), s')                    
+  | (Ref (e, loc), s) ->                         (*RefS*)
+    (match reduce (e,s) with Some (e',s') -> Some (Ref(e',loc),s')
+      | None -> None)
+
+
+  | (Atrib(Loc(l,_), v,loc),s) when is_val v ->                                         (*Atrib*)
+      Some (Skip loc, update (l, v) s)
+  | (Atrib(Loc(l,loc'),e,loc),s) ->                                          (*AtribD*)
+    (match reduce (e,s) with 
+      | Some (e',s') -> Some (Atrib(Loc(l,loc'),e',loc),s')
+      | None -> None)
+  | (Atrib(e1,e2,loc),s) ->
+    (match reduce (e1,s) with 
+      | Some (e1',s') -> Some (Atrib(e1',e2,loc),s')
       | None -> None)
   | (Secv(Skip _,e,_),s) -> Some (e,s)                                 (*Secv*)
   | (Secv(e1,e2,loc),s) ->                                             (*SecvS*)
@@ -62,13 +77,22 @@ let rec reduce = function
     -> Some (Float (float_of_int n, loc), s)
   | (App (App(Z loc, g, loc1), v, loc2), s)
     -> Some (App (App (g, App(Z loc, g, loc),loc1), v, loc2), s)
-  | (App (Fun(x,_,e1,_),e2,_),s) when is_val e2 -> Some (subst x e2 e1, s)
+  | ((App (Fun(x,_,e1,_),e2,_) | Let (x,_,e2,e1,_)),s) when is_val e2 
+    -> Some (subst x e2 e1, s)
   | (App (e1, e2, loc), s) when is_fun e1
      -> (match reduce (e2,s) with Some (e2',s') -> Some (App(e1,e2',loc),s')
       | None -> None)
   | (App (e1, e2, loc), s) 
      -> (match reduce (e1,s) with Some (e1',s') -> Some (App(e1',e2,loc),s')
       | None -> None)
+  | (Let (x, t, e2, e1, loc), s) 
+     -> (match reduce (e2,s) with 
+           |Some (e2',s') -> Some (Let (x,t,e2',e1,loc),s')
+           | None -> None)
+  | (LetRec (x, t, e2, e1, loc), s)
+     -> Some (subst x (LetRec (x, t, e2, e2, loc)) e1, s)
+ 
+
 
 (*  Normal Order
   | (App (Fun(x,_,e1,_),e2,_),s) -> Some (subst x e2 e1, s)

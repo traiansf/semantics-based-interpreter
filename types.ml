@@ -1,11 +1,8 @@
 open Mem
 open ImpAST
 
-(* types of locations *)
-type tipL = TIntRef | TFloatRef | Type of tip
-
 exception TypeError of expr*tip*tip
-exception LocError of string*locatie
+exception VarNotFound of expr
 
 (* Type inference function *)
 let rec infertype m = function
@@ -33,22 +30,19 @@ let rec infertype m = function
      | (TBool, t, t') when t=t' -> t
      | (TBool, t, t') -> raise (TypeError (e3, t, t'))
      | (t,_,_) -> raise (TypeError (e1, TBool, t)))
-  | Loc (l,loc) -> (try 
-           (match lookup l m with 
-              | TIntRef -> TInt
-              | TFloatRef -> TFloat
-           ) 
-     with Not_found -> raise (LocError (l, loc)))
-   | Var (v,loc) -> (try 
-           (match lookup v m with 
-              | Type t -> t
-           ) 
-     with Not_found -> raise (LocError (v, loc)))
-  | Atrib(l,e,loc) -> (try (match (lookup l m, infertype m e) with
-       | (TIntRef, TInt) | (TFloatRef, TFloat) -> TUnit
-       | (TIntRef, t) -> raise (TypeError (e, TInt, t))
-       | (TFloatRef, t) -> raise (TypeError (e, TFloat, t))
-     ) with Not_found -> raise (LocError (l, loc)))
+  | Deref (e,_)
+    -> (match (infertype m e) with
+          | TRef t -> t
+          | t -> raise (TypeError (e, TRef t, t)))
+  | Ref (e,_) -> TRef (infertype m e) 
+
+  | Var (v,loc) -> (try 
+           lookup v m 
+     with Not_found -> raise (VarNotFound (Var(v, loc))))
+  | Atrib(e1,e2,loc) -> (match (infertype m e1, infertype m e2) with
+       | (TRef t1, t2) when t1 = t2 -> TUnit
+       | (TRef t, t') -> raise (TypeError (e2, t, t'))
+       | (t, t') -> raise (TypeError (e1, TRef t', t)))
   | Skip _ -> TUnit
   | Secv (e1,e2,_) -> (match (infertype m e1, infertype m e2) with
      | (TUnit,t) -> t
@@ -71,13 +65,23 @@ let rec infertype m = function
   | IntOfFloat _ -> TArrow(TFloat, TInt)
   | FloatOfInt _ -> TArrow(TInt, TFloat)
   | Z _ -> TArrow(TArrow(TArrow(TInt,TInt),TArrow(TInt,TInt)),TArrow(TInt,TInt))
-  | Fun (x,t,e,_) -> TArrow(t, infertype (update_or_add (x,Type t) m) e)
+  | Fun (x,t,e,_) -> TArrow(t, infertype (update_or_add (x,t) m) e)
+  | Let (x,t,e1,e2,_) 
+    -> (match (infertype m e1, infertype (update_or_add (x,t) m) e2) with
+         | (t1,t2) when t1 = t -> t2
+         | (t1,_) -> raise (TypeError (e1,t,t1)))
+  | LetRec (x,t,e1,e2,_) 
+    -> let infertype' = infertype (update_or_add (x,t) m)
+       in (match (infertype' e1, infertype' e2) with
+             | (t1,t2) when t1 = t -> t2
+             | (t1,_) -> raise (TypeError (e1,t,t1)))
+  | e -> failwith ("Expression " ^ string_of_expr e ^ " not allowed in a program.")
 
 
-let type_check m e = try
-     let _ = infertype m e in true
+let type_check e = try
+     let _ = infertype [] e in true
   with 
     | TypeError (e,t1,t2) -> Printf.eprintf "%s\nError: Error: This expression has type %s but an expression was expected of type %s\n"  (location e) (string_of_tip t2) (string_of_tip t1) ; false
-    | LocError (l,loc) -> Printf.eprintf "Error: Location %s undefined at %s.\n" l loc ; false
+    | VarNotFound e -> Printf.eprintf "%s\nError: Variable %s unbound.\n"  (location e) (string_of_expr e) ; false
 
 

@@ -29,6 +29,8 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token PLUS MINUS MUL DIV
 %token LPAREN RPAREN
 %token FUN COLON
+%token LET REC IN
+%token REF
 %token TINT TBOOL TUNIT TFLOAT
 %token ARROW FUNX
 %token EOF
@@ -43,7 +45,7 @@ let parseError loc = raise (Lexer.ParseError loc)
 %left MUL DIV
 %nonassoc INT_CAST FLOAT_CAST
 %left APPX
-%nonassoc DEREF       /* highest precedence */
+%nonassoc DEREF REF      /* highest precedence */
 %start main             /* the entry point */
 %type <ImpAST.expr> main
 %%
@@ -58,13 +60,14 @@ tip:
   | TFLOAT                     {TFloat}
   | tip ARROW tip              { TArrow ($1, $3) }
   | LPAREN tip RPAREN          { $2 }
+  | tip REF                    { TRef $1 }
 
 expr:
   | expr PLUS expr             { Op ($1,Plus,$3, location()) }
   | expr MINUS expr             { Op ($1,Minus,$3, location()) }
   | expr MUL expr             { Op ($1,Mul,$3, location()) }
   | expr DIV expr             { Op ($1,Div,$3, location()) }
-  | LOC ASGNOP expr            { Atrib ($1,$3, location()) }
+  | expr ASGNOP expr            { Atrib ($1,$3, location()) }
   | expr LTE expr              { Op ($1, Mic, $3, location()) }
   | expr LT expr              { Op ($1, MicS, $3, location()) }
   | expr SEQ expr              { Secv ($1,$3, location()) }
@@ -75,6 +78,10 @@ expr:
                                { For ($3, $5, $7, $9, location()) }
   | FUN LPAREN VAR COLON tip RPAREN ARROW expr %prec FUNX
                                { Fun ($3, $5, $8, location()) }
+  | LET REC VAR COLON tip EQ expr IN expr %prec FUNX
+                               { LetRec ($3, $5, $7, $9, location()) }
+  | LET VAR COLON tip EQ expr IN expr %prec FUNX
+                               { Let ($2, $4, $6, $8, location()) }
   | expr funexpr               { App ($1, $2, location()) }
   | funexpr                    { $1 }
   | error                      { parseError (location ()) }
@@ -91,5 +98,6 @@ funexpr:
   | FLOAT_CAST                 { FloatOfInt (location()) }
   | Z                          { Z (location()) }
   | LPAREN expr RPAREN         { $2 }
-  | DEREF LOC                  { Loc ($2, location()) }
+  | DEREF expr                 { Deref ($2, location()) }
+  | REF expr                   { Ref ($2, location()) }
 ;

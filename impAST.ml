@@ -16,16 +16,17 @@ let string_of_op = function
   | MicS -> "<"
   | Mic -> "<="
 
-let string_of_l s = s
+let string_of_l s = "mem[" ^ string_of_int s ^ "]"
 
 (* types of expressions *)
-type tip = TInt | TFloat | TBool | TUnit | TArrow of tip * tip
+type tip = TInt | TFloat | TBool | TUnit | TArrow of tip * tip | TRef of tip
 let rec string_of_tip = function
   | TInt -> "int"
   | TFloat -> "float"
   | TBool -> "bool"
   | TUnit -> "unit"
   | TArrow (t1,t2) -> "(" ^ string_of_tip t1 ^ " -> " ^ string_of_tip t2 ^ ")"
+  | TRef t -> string_of_tip t ^ " ref"
 
 
 type expr =
@@ -33,26 +34,34 @@ type expr =
   | Bool of bool * locatie
   | Int of int * locatie
   | Float of float * locatie
-  | Loc of string * locatie
+  | Loc of int * locatie
   | Var of string * locatie
   | DeBruijnVar of int * locatie
   | Op of expr * op * expr * locatie
-  | Atrib of string * expr * locatie
+  | Atrib of expr * expr * locatie
+  | Ref of expr * locatie
+  | Deref of expr * locatie
   | Secv of expr * expr * locatie
   | If of expr * expr * expr * locatie
   | While of expr * expr * locatie
   | For of expr * expr * expr * expr * locatie | Skip of locatie
   | Fun of string * tip * expr * locatie
+  | Let of string * tip * expr * expr * locatie
+  | LetRec of string * tip * expr * expr * locatie
   | DeBruijnFun of expr * locatie
+  | DeBruijnLet of expr * expr * locatie
+  | DeBruijnLetRec of expr * expr * locatie
   | App of expr * expr * locatie
 
 let exps = function
- | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ 
- | Loc _ | Var _ |DeBruijnVar _ | Skip _ | Z _
+ | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _
+ | Var _ |DeBruijnVar _ | Skip _ | Z _
    -> []
- | Atrib(_,e,_) | Fun(_,_,e,_) | DeBruijnFun (e,_)
+ | Ref (e,_) | Deref (e,_) | Fun(_,_,e,_) | DeBruijnFun (e,_)
    -> [e]
- | Op(e1,_,e2,_) | Secv(e1,e2,_) | While(e1,e2,_) | App(e1,e2,_)
+ | Atrib(e1,e2,_) | Op(e1,_,e2,_) | Secv(e1,e2,_) | While(e1,e2,_) 
+ | App(e1,e2,_) | Let (_,_,e1,e2,_) | LetRec (_,_,e1,e2,_) 
+ | DeBruijnLet (e1,e2,_) | DeBruijnLetRec (e1,e2,_)
    -> [e1;e2]
  | If(e1,e2,e3,_)
    -> [e1;e2;e3]
@@ -61,13 +70,19 @@ let exps = function
 
 let revExps = function
    | (e,[]) -> e
-   | (Atrib(l,_,loc),[e]) -> Atrib(l,e,loc)
+   | (Deref(_,loc),[e]) -> Deref(e,loc)
+   | (Ref(_,loc),[e]) -> Ref(e,loc)
    | (Fun(x,t,_,loc),[e]) -> Fun(x,t,e,loc) 
    | (DeBruijnFun(_,loc),[e]) -> DeBruijnFun(e,loc) 
+   | (Atrib(_,_,loc),[e1;e2]) -> Atrib(e1,e2,loc)
    | (Op(_,op,_,loc),[e1;e2]) -> Op(e1,op,e2,loc) 
    | (Secv(_,_,loc),[e1;e2]) -> Secv(e1,e2,loc) 
    | (While(_,_,loc),[e1;e2]) -> While(e1,e2,loc) 
    | (App(_,_,loc),[e1;e2]) -> App(e1,e2,loc) 
+   | (DeBruijnLet(_,_,loc),[e1;e2]) -> DeBruijnLet(e1,e2,loc) 
+   | (DeBruijnLetRec(_,_,loc),[e1;e2]) -> DeBruijnLetRec(e1,e2,loc) 
+   | (Let(x,t,_,_,loc),[e1;e2]) -> Let(x,t,e1,e2,loc) 
+   | (LetRec(x,t,_,_,loc),[e1;e2]) -> LetRec(x,t,e1,e2,loc) 
    | (If(_,_,_,loc), [e1;e2;e3]) -> If(e1,e2,e3,loc)
    | (For(_,_,_,_,loc), [e1;e2;e3;e4]) -> For(e1,e2,e3,e4,loc)
    | _ -> failwith "this should not happen"
@@ -102,6 +117,8 @@ let var e =
   let var_fold = function
      | (Var (x,_),_) -> [x]
      | (Fun (x,_,_,_),[vs]) -> remove x vs
+     | (Let (x,_,_,_,_), [vs1;vs2]) -> union vs1 (remove x vs2)
+     | (LetRec (x,_,_,_,_), [vs1;vs2]) -> remove x (union vs1 vs2)
      | (_,vs_list) -> List.fold_left union [] vs_list
   in postVisit var_fold e
 
@@ -131,6 +148,10 @@ let deBruijnify =
     (function
        | Var (x,l) -> Done (DeBruijnVar (List.assoc x sigma, l))
        | Fun (x,_,e,l) -> Done (DeBruijnFun(deBruijnify ((x,0)::(increaseIndexes sigma)) e, l))
+       | Let (x,_,e1,e2,l) -> Done (DeBruijnLet(deBruijnify sigma e1, deBruijnify ((x,0)::(increaseIndexes sigma)) e2, l))
+       | LetRec (x,_,e1,e2,l) 
+         -> let deBruijn = deBruijnify ((x,0)::(increaseIndexes sigma)) 
+            in Done (DeBruijnLetRec(deBruijn e1, deBruijn e2, l))
        | _ -> More)
    (fun x -> x)
   in deBruijnify []
@@ -140,6 +161,8 @@ let rec deBruijnSubst n e =
   (function
      | DeBruijnVar (n', l) as v -> Done (if n = n' then e else v)
      | DeBruijnFun(e', l) -> Done (DeBruijnFun(deBruijnSubst (n+1) e e',l))
+     | DeBruijnLet(e1', e2', l) -> Done (DeBruijnLet(deBruijnSubst n e e1', deBruijnSubst (n+1) e e2',l))
+     | DeBruijnLetRec(e1', e2', l) -> Done (DeBruijnLet(deBruijnSubst n e e1', deBruijnSubst (n+1) e e2',l))
      | _ -> More)
  (fun x -> x)
 
@@ -169,11 +192,13 @@ let string_of_expr e =
   | (Int (i,_),_) -> string_of_int i
   | (Float (f,_),_) -> string_of_float f
   | (Bool (b,_),_) -> string_of_bool b
-  | (Loc (s,_),_) -> "!" ^ string_of_l s
+  | (Loc (l,_),_) -> string_of_l l
+  | (Ref _,[s]) -> "ref (" ^ s ^ ")"
+  | (Deref _,[s]) -> "! (" ^ s ^ ")"
   | (Var (s,_),_) -> s
   | (DeBruijnVar (n,_),_) -> "U" ^ string_of_int n
   | (Op (_,b, _,_),[s1;s2]) -> "(" ^ s1 ^ (string_of_op b) ^ s2 ^ ")"
-  | (Atrib (s,_,_),[s2]) -> "(" ^ string_of_l s ^ ":=" ^ s2 ^ ")"
+  | (Atrib _,[s1;s2]) -> "(" ^ s1 ^ ":=" ^ s2 ^ ")"
   | (If _,[s1;s2;s3]) ->
     "(if " ^ s1 ^ "\nthen " ^ s2 ^ "\nelse " ^ s3 ^ ")"
   | (While _,[s1;s2]) ->
@@ -185,8 +210,16 @@ let string_of_expr e =
   | (Skip _, _) -> "()"
   | (Fun (x,t,_,_),[s]) -> 
     "(fun (" ^ x ^ ":" ^ string_of_tip t ^ ") -> " ^ s ^ ")"
-  | (DeBruijnFun (_,_),[s]) -> 
+  | (Let (x,t,_,_,_),[s1;s2]) -> 
+    "(let " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
+  | (LetRec (x,t,_,_,_),[s1;s2]) -> 
+    "(let rec " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
+  | (DeBruijnFun _,[s]) -> 
     "(fun -> " ^ s ^ ")"
+  | (DeBruijnLet _,[s1;s2]) -> 
+    "(let " ^ s1 ^ " in " ^ s2 ^ ")"
+  | (DeBruijnLetRec _,[s1;s2]) -> 
+    "(let rec " ^ s1 ^ " in " ^ s2 ^ ")"
   | (App _, [s1;s2]) -> 
     " (" ^ s1 ^ s2 ^ ")"
   | _ -> failwith "This should not happen"
@@ -200,6 +233,8 @@ let location = function
   | Float (_,l)
   | Bool (_,l)
   | Loc (_,l)
+  | Ref (_,l)
+  | Deref (_,l)
   | Var (_,l)
   | DeBruijnVar (_,l)
   | Op (_, _, _,l)
@@ -211,13 +246,10 @@ let location = function
   | Skip l 
   | App (_,_,l)
   | Fun (_,_,_,l)
+  | Let (_,_,_,_,l)
+  | LetRec (_,_,_,_,l)
   | DeBruijnFun (_,l)
+  | DeBruijnLet (_,_,l)
+  | DeBruijnLetRec (_,_,l)
   -> l
-
-let locations e =
-   let locations_fold = function
-          | (Loc (l,_),_) -> [l]
-          | (Atrib(l,_,_),[locs]) -> union [l] locs
-          | (_,locs_list) -> List.fold_left union [] locs_list
-    in postVisit locations_fold e
 

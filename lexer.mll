@@ -45,6 +45,9 @@ let keyword_table = Hashtbl.create 20
    ( "for"          , FOR );
    ( "true"         , TRUE );
    ( "false"        , FALSE );
+   ( "let"          , LET );
+   ( "in"           , IN );
+   ( "ref"          , REF );
    ( "Z"            , Z);
 ]
 
@@ -67,15 +70,13 @@ rule token = parse
   | "()"           { SKIP }  
   | '('            { LPAREN }
   | ')'            { RPAREN }
+  | "="            { EQ }
   | ":="           { ASGNOP }
   | ":"            { COLON }
   | ';'            { SEQ }
  | '!'            { DEREF }
   | ['A'-'Z' 'a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as id
                    { try Hashtbl.find keyword_table id 
-                     with Not_found -> 
-                       if String.get id 0 = 'l' 
-                       then LOC(id) 
-                       else VAR(id) }
+                     with Not_found -> VAR(id) }
   | eof            { EOF }
   | _              { lex_error lexbuf }
