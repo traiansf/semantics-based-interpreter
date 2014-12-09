@@ -16,7 +16,7 @@ let string_of_op = function
   | MicS -> "<"
   | Mic -> "<="
 
-let string_of_l s = "mem[" ^ string_of_int s ^ "]"
+let string_of_l s = "_loc" ^ string_of_int s ^ "_"
 
 (* types of expressions *)
 type tip = TInt | TFloat | TBool | TUnit | TArrow of tip * tip | TRef of tip
