@@ -1,7 +1,8 @@
-ln := 10 ;
-ls := 0 ;
-while 1 <= !ln do
-  ls := !ls + !ln ;
-  ln := !ln - 1
-done
+let n : int ref = ref 10 in
+let s : int ref = ref 0 in
+while 1 <= !n do
+  s := !s + !n ;
+  n := !n - 1
+done ;
+! s
 

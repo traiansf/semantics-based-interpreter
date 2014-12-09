@@ -1,4 +1,4 @@
-lx := 3;
-ly := 7;
-lz := (!lx + !ly) 
-
+let x : int = 3 in
+let y : int = 7 in
+let z : int = (x + y) 
+in z

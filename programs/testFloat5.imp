@@ -1,13 +1,13 @@
-lfe := 0.0001;
-lfcr := -3./4.;
-lfci := !lfe;
-lfzr := !lfcr;
-lfzi := !lfci;
-ln := 0;
-while !lfzr*!lfzr - !lfzi*!lfzi < 4. do
-  lfzr_old := !lfzr;
-  lfzr := !lfzr*!lfzr - !lfzi*!lfzi + !lfcr;
-  lfzi := 2.*!lfzr_old*!lfzi + !lfci;
-  ln := !ln + 1
+let e : float = 0.0001 in
+let cr : float = -3./4. in
+let ci : float = e in
+let zr : float ref = ref cr in
+let zi : float ref = ref ci in
+let n : int ref = ref 0 in
+while !zr*!zr - !zi*!zi < 4. do
+  let zr_old : float = !zr in
+    zr := !zr*!zr - !zi*!zi + cr;
+    zi := 2.*zr_old*!zi + ci;
+    n := !n + 1
 done ;
-lfp := float_of_int !ln * !lfe
+float_of_int !n * e

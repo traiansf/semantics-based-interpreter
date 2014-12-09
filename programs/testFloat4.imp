@@ -1,2 +1,3 @@
-lx := 7;
-lfy := 4.5
+let x : int ref = ref 7 in
+let y : float ref = ref 4.5 in
+()
