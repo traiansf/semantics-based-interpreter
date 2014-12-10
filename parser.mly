@@ -13,7 +13,6 @@ let location () =  let start_pos = Parsing.symbol_start_pos () in
 let parseError loc = raise (Lexer.ParseError loc)
 
 %}
-%token Z
 %token INT_CAST FLOAT_CAST
 %token <int> INT
 %token <float> FLOAT
@@ -161,7 +160,6 @@ funexpr:
   | WILD                       { AnyVar (location()) }
   | INT_CAST                   { IntOfFloat (location()) }
   | FLOAT_CAST                 { FloatOfInt (location()) }
-  | Z                          { Z (location()) }
   | LPAREN expr RPAREN         { $2 }
   | DEREF expr                 { Deref ($2, location()) }
   | REF expr                   { Ref ($2, location()) }
