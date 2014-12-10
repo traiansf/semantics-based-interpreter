@@ -7,7 +7,7 @@ let type_and_run debug pgm =
           Printf.printf "The program typechecks. Executing..." ;
           if debug then print_newline () else () ;
           flush stdout ;
-          let final = (Semantics.evaluate debug (pgm,[])) in
+          let final = (Semantics.evaluate debug (handle_decls pgm,[])) in
             Printf.printf " done.\n Final configuration:\n\n  %s\n\n"
                   (Semantics.string_of_config final)
       end else ()

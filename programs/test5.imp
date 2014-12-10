@@ -4,4 +4,4 @@ let n = ref 100 in
 if (!n <= 100) then () else
   y := !y + x ;
 n := !n + -1 ;
-!n
+!n;;

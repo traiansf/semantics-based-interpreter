@@ -36,7 +36,7 @@ let rec string_of_tip = function
 
 
 type expr =
-  | IntOfFloat of locatie | FloatOfInt of locatie | Z of locatie
+  | IntOfFloat of locatie | FloatOfInt of locatie 
   | Bool of bool * locatie
   | Int of int * locatie
   | Float of float * locatie
@@ -61,6 +61,8 @@ type expr =
   | Match of expr * expr list * locatie
   | Case of expr * expr * locatie
   | Decls of expr list * locatie
+  | LetDecl of expr * expr * locatie
+  | LetRecDecl of string * tip * expr * locatie
   | VarTypeDecl of string * expr list * locatie
   | VarTypeCase of string * tip * locatie
   | ConstTypeCase of string * locatie
@@ -69,19 +71,21 @@ type expr =
 
 let exps = function
  | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _
- | Var _ | Skip _ | Z _ | AnyVar _
+ | Var _ | Skip _ | AnyVar _
    -> []
  | Ref (e,_) | Deref (e,_) | Fun(e,_) | TypedExpr (e,_,_)
    -> [e]
  | Atrib(e1,e2,_) | Op(e1,_,e2,_) | Secv(e1,e2,_) | While(e1,e2,_) 
- | App(e1,e2,_) | LetRec (_,_,e1,e2,_) | Case(e1,e2,_)
+ | App(e1,e2,_) | LetRec (_,_,e1,e2,_) | Case(e1,e2,_) 
    -> [e1;e2]
  | Let (e1,e2,e3,_) | If(e1,e2,e3,_) -> [e1;e2;e3]
  | For(e1,e2,e3,e4,_) -> [e1;e2;e3;e4]
  | Tuple(l,_) -> l
  | Match(e,l,_) -> e::l
  | Function(l,_) -> l
- | Decls (l,_) 
+ | Decls (l,_) -> l 
+ | LetDecl (e1,e2,_) -> [e1;e2]
+ | LetRecDecl (_,_,e1,_) -> [e1]
  | VarTypeDecl (_,l,_) -> l
  | VarTypeCase _ 
  | ConstTypeCase _ 
@@ -109,6 +113,8 @@ let revExps = function
    | (Case(_,_,loc), [e1;e2]) -> Case(e1,e2,loc)
    | (TypedExpr(_,t,loc), [e]) -> TypedExpr(e,t,loc)
    | (Decls (_,loc), l) -> Decls (l,loc) 
+   | (LetDecl(_,_,loc),[e1;e2]) -> LetDecl(e1,e2,loc)
+   | (LetRecDecl(x,t,_,loc),[e]) -> LetRecDecl(x,t,e,loc)
    | (VarTypeDecl (x,_,loc), l) -> VarTypeDecl(x,l,loc)
    | (Variant (x,_,loc), [e]) -> Variant(x,e,loc)
    | _ -> failwith "revExps: This should not happen. Missing match case?"
@@ -208,6 +214,14 @@ let rec substitute sigma =
             let capture = intersect vx vs in 
                let sigma' = freesubst sigma (union vs (var e)) capture in
                  Done (Case(substitute sigma' xe, substitute sigma' e, l))
+     | Let (ex,e1,e2,l) 
+       -> (match substitute sigma (App (Case(ex,e2,l),e1,l))
+          with App (Case(ex,e2,_),e1,_) -> Done (Let(ex,e1,e2,l))
+            | _ -> failwith "substitute: problems with let substitution")
+     | LetRec (x,t,e1,e2,l)
+       -> (match substitute sigma (Case (Var(x,l),App (e1,e2,l),l))
+           with Case(Var(x,_), App(e1,e2,_),_) -> Done (LetRec(x,t,e1,e2,l))
+            | _ -> failwith "substitute: problems with let rec substitution")
      | _ -> More)
   (fun x -> x)
 
@@ -218,7 +232,6 @@ let subst x ex e = substitute [x,(ex, var ex)] e
 
 let string_of_expr e = 
   let string_of_expr_fold = function
-  | (Z _,_) -> "Z"
   | (IntOfFloat _,_) -> "int_of_float"
   | (FloatOfInt _,_) -> "float_of_int"
   | (Int (i,_),_) -> string_of_int i
@@ -243,7 +256,7 @@ let string_of_expr e =
   | (Fun _,[s]) -> 
     "(fun " ^ s ^ ")"
   | (TypedExpr(_,t,_),[s]) -> "(" ^ s ^ ":" ^ string_of_tip t ^ ")"
-  | (Let _,[sx;s1;s2]) -> 
+   | (Let _,[sx;s1;s2]) -> 
     "(let " ^ sx  ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
   | (LetRec (x,t,_,_,_),[s1;s2]) -> 
     "(let rec " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
@@ -256,8 +269,12 @@ let string_of_expr e =
   | (Function _, ls) ->
     "(" ^ "function " ^ String.concat " | " ls ^ ")"
   | (Case _, [s1;s2]) -> s1 ^ " -> " ^ s2
-  | (Decls (_,_), sl) -> String.concat "\n\n" sl
-  | (VarTypeDecl (x,_,_), sl) -> "type " ^ x ^ " = \n    " ^ String.concat "\n  | " sl
+  | (Decls (_,_), sl) -> String.concat "\n\n" sl ^ ";;"
+  | (LetDecl _,[sx;s1]) -> 
+    "let " ^ sx  ^ " = " ^ s1 ^ " ;;"
+  | (LetRecDecl (x,t,_,_),[s1]) -> 
+    "let rec " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ ";;"
+  | (VarTypeDecl (x,_,_), sl) -> "type " ^ x ^ " = \n    " ^ String.concat "\n  | " sl ^ ";;"
   | (Variant (x,_,_), [s]) -> x ^ " " ^ s 
   | (VarTypeCase (x,t,_),[]) -> x ^ " of " ^ string_of_tip t
   | (ConstTypeCase (x,_),[]) -> x
@@ -266,7 +283,6 @@ let string_of_expr e =
   in postVisit string_of_expr_fold e
 
 let location = function
-  | Z l
   | IntOfFloat l
   | FloatOfInt l
   | Int (_,l)
@@ -295,9 +311,25 @@ let location = function
   | Case (_,_,l)
   | Decls (_,l) 
   | VarTypeDecl (_,_,l)
+  | LetDecl (_,_,l)
+  | LetRecDecl (_,_,_,l)
   | VarTypeCase (_,_,l) 
   | ConstTypeCase (_,l) 
   | Const (_,l)
   | Variant (_,_,l)
   -> l
 
+let rec handle_decls = function
+  | Decls(VarTypeDecl _ as typ::td, loc) 
+    -> (match handle_decls (Decls (td, loc)) with
+        | Decls(td,_) -> Decls(typ::td,loc)
+        | e -> Decls(typ::[e], loc))
+  | Decls(LetRecDecl (x,t,e,loc)::dt,loc')
+    -> LetRec(x,t,e,handle_decls (Decls(dt,loc')),loc)
+  | Decls(LetDecl (e1,e2,loc)::dt,loc')
+    -> Let(e1,e2,handle_decls (Decls(dt,loc')),loc)
+  | Decls([e],loc) as decl -> decl
+  | Decls(e::_,_) -> failwith (location e ^ "\n Error: unknown declaration or multiple expressions")
+  | e -> failwith (location e ^ "\n Error: Expected declaration here")
+ 
+    

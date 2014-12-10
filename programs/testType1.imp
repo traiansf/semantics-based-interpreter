@@ -1,2 +1,2 @@
-type stringOption = Some of string | None
-5
+type stringOption = Some of string | None;;
+5;;

@@ -61,12 +61,16 @@ main:
 ;
 
 decls:
-   | decl decls                   {$1::$2}
-   | expr                         {[$1]}
+   | decl decls         {$1::$2}
+   | expr DOUBLESEQ               {[$1]}
 ;
 
 decl:
-  TYPE ID EQ typecases          { VarTypeDecl($2,$4, location()) }
+  | TYPE ID EQ typecases DOUBLESEQ         { VarTypeDecl($2,$4, location()) }
+  | LET REC ID COLON tip EQ expr DOUBLESEQ
+                               { LetRecDecl ($3, $5, $7, location()) }
+  | LET expr EQ expr DOUBLESEQ
+                               { LetDecl ($2, $4, location()) }
 ;
 
 typecases:

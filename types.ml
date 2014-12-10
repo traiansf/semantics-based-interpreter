@@ -87,7 +87,9 @@ and
      | (t1,t2) -> raise (TypeError (e1,TArrow(t2,t2),t1)))
   | IntOfFloat _ -> TArrow(TFloat, TInt)
   | FloatOfInt _ -> TArrow(TInt, TFloat)
+(* type of the Z combinator
   | Z _ -> TArrow(TArrow(TArrow(TInt,TInt),TArrow(TInt,TInt)),TArrow(TInt,TInt))
+*)
   | Fun (e,_) -> infertype m e
   | Function (fstCase::choices,_) 
     -> let t = infertype m fstCase in
@@ -112,6 +114,10 @@ and
       TArrow(tp, infertype m' e)
   | Decls(VarTypeDecl(x,cases,_)::dt,loc)
     -> let m' = addVariants m (DefType x) cases in infertype m' (Decls(dt,loc))
+  | Decls(LetDecl (e1,e2,loc)::dt,loc')
+     -> infertype m (Let(e1,e2,Decls(dt,loc'),loc)) 
+  | Decls(LetRecDecl (x,t,e,loc)::dt,loc')
+     -> infertype m (LetRec(x,t,e,Decls(dt,loc'),loc)) 
   | Decls([e],_) -> infertype m e
   | Decls(e::t,_) -> raise (InvalidExpression (e,false))
   | e -> inferPatternType false m e

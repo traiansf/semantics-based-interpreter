@@ -95,8 +95,10 @@ let rec reduce = function
     -> Some (Int (int_of_float f, loc), s)
   | (App (FloatOfInt _, Int (n,_), loc), s)
     -> Some (Float (float_of_int n, loc), s)
+(*  Semantics for the Z combinator (removed in favor of variant constructors)
   | (App (App(Z loc, g, loc1), v, loc2), s)
     -> Some (App (App (g, App(Z loc, g, loc),loc1), v, loc2), s)
+*)
   | (Match (v,cases,l), s) when is_val v
     -> reduce (App (Function(cases,l),v,l), s)
   | (Match (e,cases,l), s) 
@@ -143,7 +145,7 @@ let rec reduce = function
 
 
   | (Decls(VarTypeDecl _::dt,loc), s) ->  Some (Decls(dt,loc), s)
-  | (Decls([e],loc), s) ->  Some (e, s)
+ | (Decls([e],loc), s) ->  Some (e, s)
   | (Variant (x,e,loc),s)
    -> (match reduce (e,s) with
            | Some (e',s') -> Some (Variant (x,e',loc),s')

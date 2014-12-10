@@ -1,6 +1,6 @@
-type intList = Nil | Cons of int * intList
+type intList = Nil | Cons of int * intList;;
 let reverse = let rec reverse : intList -> intList -> intList = fun (list : intList) -> function
     Nil -> list
   | Cons((n:int),(t:intList)) -> reverse (Cons(n,list)) t
-  in reverse (Nil)
-in reverse (Cons(5,Cons(7,Cons(10,Nil))))
+  in reverse (Nil);;
+reverse (Cons(5,Cons(7,Cons(10,Nil))));;

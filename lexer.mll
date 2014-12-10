@@ -50,7 +50,6 @@ let keyword_table = Hashtbl.create 20
    ( "rec"          , REC );
    ( "in"           , IN );
    ( "ref"          , REF );
-   ( "Z"            , Z);
    ( "match"        , MATCH );
    ( "with"         , WITH );
    ( "type"         , TYPE );
@@ -61,7 +60,7 @@ let keyword_table = Hashtbl.create 20
 
 rule token = parse
     [ '\n' ] { incr_linenum lexbuf ; token lexbuf } (* count lines *)
-  | ['/']['/'][^'\n']*(['\n']|eof) { incr_linenum lexbuf ; token lexbuf }
+ | "(*"            { comments 0 lexbuf }
                                     (* skip line comments but count lines *)
   | [' ' '\t' '\r' ]     { token lexbuf }     (* skip blanks *)
   | ['-']?['0'-'9']+['.']['0'-'9']* as lxm { FLOAT(float_of_string lxm) }
@@ -91,3 +90,10 @@ rule token = parse
                      with Not_found -> ID(id) }
   | eof            { EOF }
   | _              { lex_error lexbuf }
+and comments level = parse
+  | "*)"        { if level = 0 then token lexbuf
+                  else comments (level-1) lexbuf }
+  | "(*"        { comments (level+1) lexbuf }
+  | [ '\n' ]    { incr_linenum lexbuf ; comments level lexbuf } (* count lines *)
+  | _           { comments level lexbuf }
+  | eof         { raise End_of_file }

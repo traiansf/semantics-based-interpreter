@@ -1,2 +1,2 @@
-(fun ((a:int),(b:int),((c:int),(d:int))) -> a + b + c + d) (1,2,(3,4))
+(fun ((a:int),(b:int),((c:int),(d:int))) -> a + b + c + d) (1,2,(3,4));;
 
