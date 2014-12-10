@@ -6,12 +6,12 @@ let is_fun = function
   | _ -> false
 
 let rec is_val = function
-  | Bool _ | Int _ | Float _ | Loc _ | Skip _ | Const _ -> true
+  | Bool _ | Int _ | Float _ | String _ | Loc _ | Skip _ | Const _ -> true
   | Tuple (l,_) -> List.fold_left (fun b -> fun e -> b && is_val e) true l 
   | Variant (x,e,_) -> is_val e
   | e -> is_fun e
 
-let matchPattern p e =
+let matchPattern p e any =
   let rec matchPattern pl el sigma = match (pl,el) with
     | ([],[]) -> sigma
     | (TypedExpr(p,_,_)::pt,el) -> matchPattern (p::pt) el sigma
@@ -22,10 +22,11 @@ let matchPattern p e =
     | (Int (n,_)::pt, Int(n',_)::et) when n=n' -> matchPattern pt et sigma
     | (Bool (n,_)::pt, Bool(n',_)::et) when n=n' -> matchPattern pt et sigma
     | (Float (n,_)::pt, Float(n',_)::et) when n=n' -> matchPattern pt et sigma
+    | (String (n,_)::pt, String(n',_)::et) when n=n' -> matchPattern pt et sigma
     | (Loc (n,_)::pt, Loc(n',_)::et) when n=n' -> matchPattern pt et sigma
     | (Skip _::pt, Skip _::et) -> matchPattern pt et sigma
     | (Var (x,_)::pt, e::et) -> matchPattern pt et ((x,e)::sigma)
-    | (AnyVar _::pt, e::et) -> matchPattern pt et sigma
+    | (AnyVar _::pt, e::et) when any -> matchPattern pt et sigma
     | (Const (c,_)::pt, Const (c',_)::et) when c = c' -> matchPattern pt et sigma
     | (Variant (v,p,_)::pt, Variant (v',e,_)::et) when v = v' -> matchPattern (p::pt) (e::et) sigma
     | _ -> raise Not_found
@@ -44,6 +45,9 @@ let rec reduce = function
   | (Op(Int (n1,_),Mic,Int (n2,_),loc),s) -> Some (Bool (n1<=n2,loc),s)            (*Op<=*)
   | (Op(Float (f1,_),Mic,Float (f2,_),loc),s) -> Some (Bool (f1<=f2,loc),s)            (*Op<=*)
   | (Op(Int (n1,_),MicS,Int (n2,_),loc),s) -> Some (Bool (n1<n2,loc),s)
+  | (Op(v1,Equal,v2,loc),s) when is_val v1 && is_val v2 
+    -> Some (Bool ((try (matchPattern v1 v2 false)  = []
+                    with Not_found -> false),loc),s)
   | (Op(Float (f1,_),MicS,Float (f2,_),loc),s) -> Some (Bool (f1<f2,loc),s)
   | (Op(Int (n1,loc1),op,e2,loc),s) ->                                        (*OpD*)
     (match reduce (e2,s) with 
@@ -106,7 +110,7 @@ let rec reduce = function
          | Some (e',s') -> Some (Match (e',cases,l), s')
          | None -> None)
   | (App (Fun(Case(p,e,lc),lf),v,la),s) when is_val v 
-    -> (try let sigma = matchPattern p v in 
+    -> (try let sigma = matchPattern p v true in 
          Some (substitute (addVars sigma) e,s) 
         with Not_found -> None)
   | (Let (p,e2,e1,l),s) when is_val e2 

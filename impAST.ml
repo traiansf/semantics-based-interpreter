@@ -7,9 +7,11 @@ type op =
   | Mul
   | Div
   | MicS
+  | Equal
 
 let string_of_op = function
   | Plus -> "+"
+  | Equal -> "="
   | Minus -> "-"
   | Mul -> "*"
   | Div -> "/"
@@ -19,7 +21,7 @@ let string_of_op = function
 let string_of_l s = "_loc" ^ string_of_int s ^ "_"
 
 (* types of expressions *)
-type tip = TInt | TFloat | TBool | TUnit 
+type tip = TInt | TFloat | TBool | TString | TUnit 
   | TArrow of tip * tip 
   | TRef of tip
   | TProd of tip list
@@ -28,6 +30,7 @@ let rec string_of_tip = function
   | TInt -> "int"
   | TFloat -> "float"
   | TBool -> "bool"
+  | TString -> "string"
   | TUnit -> "unit"
   | TArrow (t1,t2) -> "(" ^ string_of_tip t1 ^ " -> " ^ string_of_tip t2 ^ ")"
   | TRef t -> string_of_tip t ^ " ref"
@@ -40,6 +43,7 @@ type expr =
   | Bool of bool * locatie
   | Int of int * locatie
   | Float of float * locatie
+  | String of string * locatie
   | Loc of int * locatie
   | Var of string * locatie
   | AnyVar of locatie
@@ -70,7 +74,7 @@ type expr =
   | Const of string * locatie
 
 let exps = function
- | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _
+ | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _ | String _
  | Var _ | Skip _ | AnyVar _
    -> []
  | Ref (e,_) | Deref (e,_) | Fun(e,_) | TypedExpr (e,_,_)
@@ -237,6 +241,7 @@ let string_of_expr e =
   | (Int (i,_),_) -> string_of_int i
   | (Float (f,_),_) -> string_of_float f
   | (Bool (b,_),_) -> string_of_bool b
+  | (String (s,_),_) -> "\"" ^ s ^ "\""
   | (Loc (l,_),_) -> string_of_l l
   | (Ref _,[s]) -> "ref (" ^ s ^ ")"
   | (Deref _,[s]) -> "! (" ^ s ^ ")"
@@ -288,6 +293,7 @@ let location = function
   | Int (_,l)
   | Float (_,l)
   | Bool (_,l)
+  | String (_,l)
   | Loc (_,l)
   | Ref (_,l)
   | Deref (_,l)

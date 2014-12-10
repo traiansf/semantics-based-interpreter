@@ -17,9 +17,10 @@ let addVariants m t cases = List.fold_left (fun m -> function VarTypeCase(v,t',_
 let rec inferPatternType inPattern m = 
  let infertype =  if inPattern then inferPatternType true else infertype in
   function
-  | Int (n,_) -> TInt
-  | Bool (b,_) -> TBool
-  | Float (f,_) -> TFloat
+  | Int _ -> TInt
+  | Bool _ -> TBool
+  | Float _ -> TFloat
+  | String _ -> TString
   | Skip _ -> TUnit
   | Var (v,loc) as var -> if inPattern then raise (UntypedVarError var) else (try 
            lookup v m 
@@ -54,6 +55,9 @@ and
      | (TInt, t)  -> raise (TypeError (e2, TInt, t))
      | (TFloat, t) -> raise (TypeError (e2, TFloat, t))
      | (t,_) -> raise (TypeError (e1, TInt, t)))
+  | Op(e1,Equal,e2,_)
+    -> let (t,t') = (infertype m e1, infertype m e2) in
+         if t = t' then TBool else raise (TypeError(e2,t,t'))
   | If(e1,e2,e3,_) -> (match (infertype m e1, infertype m e2, infertype m e3) with
      | (TBool, t, t') when t=t' -> t
      | (TBool, t, t') -> raise (TypeError (e3, t, t'))

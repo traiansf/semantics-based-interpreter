@@ -16,6 +16,7 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token INT_CAST FLOAT_CAST
 %token <int> INT
 %token <float> FLOAT
+%token <string> STRING
 %token <string> LOC
 %token <string> ID
 %token <string> VARIANT
@@ -36,7 +37,7 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token FUN COLON FUNCTION
 %token LET REC IN
 %token REF
-%token TINT TBOOL TUNIT TFLOAT
+%token TINT TBOOL TUNIT TFLOAT TSTRING
 %token ARROW FUNX
 %token EOF
 %left CHOICE /* lowest precedence */
@@ -96,6 +97,7 @@ basetip:
   | TINT                       {TInt}
   | TBOOL                      {TBool}
   | TUNIT                      {TUnit}
+  | TSTRING                    {TString}
   | TFLOAT                     {TFloat}
   | tip ARROW tip              { TArrow ($1, $3) }
   | LPAREN tip RPAREN          { $2 }
@@ -121,6 +123,7 @@ baseexpr:
   | expr ASGNOP expr            { Atrib ($1,$3, location()) }
   | expr LTE expr              { Op ($1, Mic, $3, location()) }
   | expr LT expr              { Op ($1, MicS, $3, location()) }
+  | expr EQ expr              { Op ($1, Equal, $3, location()) }
   | expr SEQ expr              { Secv ($1,$3, location()) }
   | IF expr THEN expr ELSE expr %prec IFX
                                { If ($2, $4, $6, location()) }
@@ -135,7 +138,7 @@ baseexpr:
                                { Let ($2, $4, $6, location()) }
   | MATCH expr WITH choices    { Match ($2, $4, location()) }
   | expr funexpr               { App ($1, $2, location()) }
-  | VARIANT expr               { Variant($1, $2, location()) }
+  | VARIANT funexpr            { Variant($1, $2, location()) }
   | VARIANT                    { Const($1, location()) }
   | funexpr                    { $1 }
   | error                      { parseError (location ()) }
@@ -153,6 +156,7 @@ choice:
 funexpr:
   | INT                        { Int ($1,location()) }
   | FLOAT                      { Float ($1,location()) }
+  | STRING                     { String ($1,location()) }
   | TRUE                       { Bool (true, location()) }
   | FALSE                      { Bool (false, location()) }
   | SKIP                       { Skip (location()) }

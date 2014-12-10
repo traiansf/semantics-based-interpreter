@@ -34,6 +34,7 @@ let keyword_table = Hashtbl.create 20
    ( "int"          , TINT );
    ( "bool"         , TBOOL );
    ( "float"        , TFLOAT );
+   ( "string"       , TSTRING );
    ( "unit"         , TUNIT );
    ( "int_of_float" , INT_CAST );
    ( "float_of_int" , FLOAT_CAST );
@@ -65,6 +66,8 @@ rule token = parse
   | [' ' '\t' '\r' ]     { token lexbuf }     (* skip blanks *)
   | ['-']?['0'-'9']+['.']['0'-'9']* as lxm { FLOAT(float_of_string lxm) }
   | ['-']?['0'-'9']+ as lxm { INT(int_of_string lxm) }
+  | '"' { let buffer = Buffer.create 20 in
+          STRING (stringl buffer lexbuf) }
   | "->"           { ARROW }
   | '+'            { PLUS }
   | '-'            { MINUS }
@@ -97,3 +100,13 @@ and comments level = parse
   | [ '\n' ]    { incr_linenum lexbuf ; comments level lexbuf } (* count lines *)
   | _           { comments level lexbuf }
   | eof         { raise End_of_file }
+ and  stringl buffer = parse
+ | '"' { Buffer.contents buffer }
+ | "\\t" { Buffer.add_char buffer '\t'; stringl buffer lexbuf }
+ | "\\n" { Buffer.add_char buffer '\n'; stringl buffer lexbuf }
+ | "\\n" { Buffer.add_char buffer '\n'; stringl buffer lexbuf }
+ | '\\' '"' { Buffer.add_char buffer '"'; stringl buffer lexbuf }
+ | '\\' '\\' { Buffer.add_char buffer '\\'; stringl buffer lexbuf }
+ | eof { raise End_of_file }
+ | _ as char { Buffer.add_char buffer char; stringl buffer lexbuf }
+
