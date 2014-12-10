@@ -2,12 +2,31 @@ open Mem
 open ImpAST
 
 let is_fun = function
-  | Fun _ | IntOfFloat _ | FloatOfInt _ -> true
+  | Fun _ | Function _ | IntOfFloat _ | FloatOfInt _ -> true 
   | _ -> false
 
-let is_val = function
+let rec is_val = function
   | Bool _ | Int _ | Float _ | Loc _ | Skip _ -> true
+  | Tuple (l,_) -> List.fold_left (fun b -> fun e -> b && is_val e) true l 
   | e -> is_fun e
+
+let matchPattern p e =
+  let rec matchPattern pl el sigma = match (pl,el) with
+    | ([],[]) -> sigma
+    | (TypedExpr(p,_,_)::pt,el) -> matchPattern (p::pt) el sigma
+    | (pl,TypedExpr(e,_,_)::et) -> matchPattern pl (e::et) sigma
+    | (Tuple(tp::tpt,l)::pt, Tuple(te::tet,l')::et)
+      -> matchPattern (tp::Tuple(tpt,l)::pt) (te::Tuple(tet,l')::et) sigma
+    | (Tuple([],_)::pt,Tuple([],_)::et) -> matchPattern pt et sigma
+    | (Int (n,_)::pt, Int(n',_)::et) when n=n' -> matchPattern pt et sigma
+    | (Bool (n,_)::pt, Bool(n',_)::et) when n=n' -> matchPattern pt et sigma
+    | (Float (n,_)::pt, Float(n',_)::et) when n=n' -> matchPattern pt et sigma
+    | (Loc (n,_)::pt, Loc(n',_)::et) when n=n' -> matchPattern pt et sigma
+    | (Skip _::pt, Skip _::et) -> matchPattern pt et sigma
+    | (Var (x,_)::pt, e::et) -> matchPattern pt et ((x,e)::sigma)
+    | (AnyVar _::pt, e::et) -> matchPattern pt et sigma
+    | _ -> raise Not_found
+  in matchPattern [p] [e] []
 
 let rec reduce = function
   | (Op(Int (n1,_),Plus,Int (n2,_),loc),s) -> Some (Int (n1+n2,loc),s)             (*Op+*)
@@ -47,8 +66,6 @@ let rec reduce = function
   | (Ref (e, loc), s) ->                         (*RefS*)
     (match reduce (e,s) with Some (e',s') -> Some (Ref(e',loc),s')
       | None -> None)
-
-
   | (Atrib(Loc(l,_), v,loc),s) when is_val v ->                                         (*Atrib*)
       Some (Skip loc, update (l, v) s)
   | (Atrib(Loc(l,loc'),e,loc),s) ->                                          (*AtribD*)
@@ -77,17 +94,31 @@ let rec reduce = function
     -> Some (Float (float_of_int n, loc), s)
   | (App (App(Z loc, g, loc1), v, loc2), s)
     -> Some (App (App (g, App(Z loc, g, loc),loc1), v, loc2), s)
-  | ((App (Fun(x,_,e1,_),e2,_) | Let (x,_,e2,e1,_)),s) when is_val e2 
-    -> Some (subst x e2 e1, s)
+  | (Match (v,cases,l), s) when is_val v
+    -> reduce (App (Function(cases,l),v,l), s)
+  | (Match (e,cases,l), s) 
+    -> (match reduce (e,s) with 
+         | Some (e',s') -> Some (Match (e',cases,l), s')
+         | None -> None)
+  | (App (Fun(Case(p,e,lc),lf),v,la),s) when is_val v 
+    -> (try let sigma = matchPattern p v in 
+         Some (substitute (addVars sigma) e,s) 
+        with Not_found -> None)
+  | (Let (p,e2,e1,l),s) when is_val e2 
+    -> reduce (App (Fun(Case(p,e1,l),l), e2, l), s)
+  | (App (Function (case::cases,l), v, l'), s) when is_val v
+    -> (match reduce (App (Fun (case,l), v,l'), s) with
+           | Some e -> Some e
+           | None -> Some (App (Function (cases,l), v, l'), s))
   | (App (e1, e2, loc), s) when is_fun e1
      -> (match reduce (e2,s) with Some (e2',s') -> Some (App(e1,e2',loc),s')
       | None -> None)
   | (App (e1, e2, loc), s) 
      -> (match reduce (e1,s) with Some (e1',s') -> Some (App(e1',e2,loc),s')
       | None -> None)
-  | (Let (x, t, e2, e1, loc), s) 
+  | (Let (p, e2, e1, loc), s) 
      -> (match reduce (e2,s) with 
-           |Some (e2',s') -> Some (Let (x,t,e2',e1,loc),s')
+           |Some (e2',s') -> Some (Let (p,e2',e1,loc),s')
            | None -> None)
   | (LetRec (x, t, e2, e1, loc), s)
      -> Some (subst x (LetRec (x, t, e2, e2, loc)) e1, s)

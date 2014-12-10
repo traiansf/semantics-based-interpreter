@@ -19,8 +19,11 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token <float> FLOAT
 %token <string> LOC
 %token <string> VAR
+%token WILD
 %token TRUE FALSE
 %token SEQ SKIP
+%token COMMA
+%token MATCH WITH CHOICE
 %token IF THEN ELSE
 %token WHILE DO DONE
 %token FOR
@@ -28,13 +31,14 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token ASGNOP DEREF
 %token PLUS MINUS MUL DIV
 %token LPAREN RPAREN
-%token FUN COLON
+%token FUN COLON FUNCTION
 %token LET REC IN
 %token REF
 %token TINT TBOOL TUNIT TFLOAT
 %token ARROW FUNX
 %token EOF
-%nonassoc FUNX /* lowest precedence */
+%left CHOICE /* lowest precedence */
+%nonassoc FUNX
 %right ARROW
 %right SEQ
 %nonassoc FORX
@@ -54,6 +58,16 @@ main:
 ;
 
 tip:
+  | basetip MUL prodtip       { TProd($1::$3) }
+  | basetip                   { $1 }
+;
+
+prodtip:
+  | basetip MUL prodtip        { $1::$3 }
+  | basetip                    { [$1] }           
+;
+
+basetip:
   | TINT                       {TInt}
   | TBOOL                      {TBool}
   | TUNIT                      {TUnit}
@@ -61,8 +75,19 @@ tip:
   | tip ARROW tip              { TArrow ($1, $3) }
   | LPAREN tip RPAREN          { $2 }
   | tip REF                    { TRef $1 }
+;
 
-expr:
+expr: 
+  | baseexpr COMMA exprtuple { Tuple($1::$3, location()) }
+  | baseexpr                 { $1 }
+;
+
+exprtuple:
+  | baseexpr COMMA exprtuple { $1::$3 }
+  | baseexpr                 { [$1] }
+;
+
+baseexpr:
   | expr PLUS expr             { Op ($1,Plus,$3, location()) }
   | expr MINUS expr             { Op ($1,Minus,$3, location()) }
   | expr MUL expr             { Op ($1,Mul,$3, location()) }
@@ -76,15 +101,25 @@ expr:
   | WHILE expr DO expr DONE    { While ($2, $4, location()) }
   | FOR LPAREN expr SEQ expr SEQ expr RPAREN expr %prec FORX
                                { For ($3, $5, $7, $9, location()) }
-  | FUN LPAREN VAR COLON tip RPAREN ARROW expr %prec FUNX
-                               { Fun ($3, $5, $8, location()) }
+  | FUN choice                 { Fun ($2, location()) }
+  | FUNCTION choices           { Function ($2, location()) }
   | LET REC VAR COLON tip EQ expr IN expr %prec FUNX
                                { LetRec ($3, $5, $7, $9, location()) }
-  | LET VAR COLON tip EQ expr IN expr %prec FUNX
-                               { Let ($2, $4, $6, $8, location()) }
+  | LET expr EQ expr IN expr %prec FUNX
+                               { Let ($2, $4, $6, location()) }
+  | MATCH expr WITH choices    { Match ($2, $4, location()) }
   | expr funexpr               { App ($1, $2, location()) }
   | funexpr                    { $1 }
   | error                      { parseError (location ()) }
+;
+
+choices:
+  | choice CHOICE choices      { $1::$3 }
+  | choice                     { [$1] }
+;
+
+choice:
+  expr ARROW expr %prec FUNX  { Case($1, $3, location()) }
 ;
 
 funexpr:
@@ -94,10 +129,15 @@ funexpr:
   | FALSE                      { Bool (false, location()) }
   | SKIP                       { Skip (location()) }
   | VAR                        { Var ($1,location()) }
+  | WILD                       { AnyVar (location()) }
   | INT_CAST                   { IntOfFloat (location()) }
   | FLOAT_CAST                 { FloatOfInt (location()) }
   | Z                          { Z (location()) }
   | LPAREN expr RPAREN         { $2 }
   | DEREF expr                 { Deref ($2, location()) }
   | REF expr                   { Ref ($2, location()) }
+  | typedexpr                  { $1 }
 ;
+
+typedexpr:
+  | LPAREN expr COLON tip RPAREN { TypedExpr($2, $4, location()) }

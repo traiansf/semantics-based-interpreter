@@ -19,7 +19,10 @@ let string_of_op = function
 let string_of_l s = "_loc" ^ string_of_int s ^ "_"
 
 (* types of expressions *)
-type tip = TInt | TFloat | TBool | TUnit | TArrow of tip * tip | TRef of tip
+type tip = TInt | TFloat | TBool | TUnit 
+  | TArrow of tip * tip 
+  | TRef of tip
+  | TProd of tip list
 let rec string_of_tip = function
   | TInt -> "int"
   | TFloat -> "float"
@@ -27,6 +30,7 @@ let rec string_of_tip = function
   | TUnit -> "unit"
   | TArrow (t1,t2) -> "(" ^ string_of_tip t1 ^ " -> " ^ string_of_tip t2 ^ ")"
   | TRef t -> string_of_tip t ^ " ref"
+  | TProd(l) -> "(" ^ String.concat " * " (List.map string_of_tip l) ^ ")"
 
 
 type expr =
@@ -36,7 +40,7 @@ type expr =
   | Float of float * locatie
   | Loc of int * locatie
   | Var of string * locatie
-  | DeBruijnVar of int * locatie
+  | AnyVar of locatie
   | Op of expr * op * expr * locatie
   | Atrib of expr * expr * locatie
   | Ref of expr * locatie
@@ -45,48 +49,51 @@ type expr =
   | If of expr * expr * expr * locatie
   | While of expr * expr * locatie
   | For of expr * expr * expr * expr * locatie | Skip of locatie
-  | Fun of string * tip * expr * locatie
-  | Let of string * tip * expr * expr * locatie
+  | Fun of expr * locatie
+  | Function of expr list * locatie
+  | TypedExpr of expr * tip * locatie
+  | Let of expr * expr * expr * locatie
   | LetRec of string * tip * expr * expr * locatie
-  | DeBruijnFun of expr * locatie
-  | DeBruijnLet of expr * expr * locatie
-  | DeBruijnLetRec of expr * expr * locatie
   | App of expr * expr * locatie
+  | Tuple of expr list * locatie
+  | Match of expr * expr list * locatie
+  | Case of expr * expr * locatie
 
 let exps = function
  | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _
- | Var _ |DeBruijnVar _ | Skip _ | Z _
+ | Var _ | Skip _ | Z _ | AnyVar _
    -> []
- | Ref (e,_) | Deref (e,_) | Fun(_,_,e,_) | DeBruijnFun (e,_)
+ | Ref (e,_) | Deref (e,_) | Fun(e,_) | TypedExpr (e,_,_)
    -> [e]
  | Atrib(e1,e2,_) | Op(e1,_,e2,_) | Secv(e1,e2,_) | While(e1,e2,_) 
- | App(e1,e2,_) | Let (_,_,e1,e2,_) | LetRec (_,_,e1,e2,_) 
- | DeBruijnLet (e1,e2,_) | DeBruijnLetRec (e1,e2,_)
+ | App(e1,e2,_) | LetRec (_,_,e1,e2,_) | Case(e1,e2,_)
    -> [e1;e2]
- | If(e1,e2,e3,_)
-   -> [e1;e2;e3]
- | For(e1,e2,e3,e4,_)
-   -> [e1;e2;e3;e4]
+ | Let (e1,e2,e3,_) | If(e1,e2,e3,_) -> [e1;e2;e3]
+ | For(e1,e2,e3,e4,_) -> [e1;e2;e3;e4]
+ | Tuple(l,_) -> l
+ | Match(e,l,_) -> e::l
+ | Function(l,_) -> l
 
 let revExps = function
    | (e,[]) -> e
    | (Deref(_,loc),[e]) -> Deref(e,loc)
    | (Ref(_,loc),[e]) -> Ref(e,loc)
-   | (Fun(x,t,_,loc),[e]) -> Fun(x,t,e,loc) 
-   | (DeBruijnFun(_,loc),[e]) -> DeBruijnFun(e,loc) 
+   | (Fun(_,loc),[e]) -> Fun(e,loc) 
    | (Atrib(_,_,loc),[e1;e2]) -> Atrib(e1,e2,loc)
    | (Op(_,op,_,loc),[e1;e2]) -> Op(e1,op,e2,loc) 
    | (Secv(_,_,loc),[e1;e2]) -> Secv(e1,e2,loc) 
    | (While(_,_,loc),[e1;e2]) -> While(e1,e2,loc) 
    | (App(_,_,loc),[e1;e2]) -> App(e1,e2,loc) 
-   | (DeBruijnLet(_,_,loc),[e1;e2]) -> DeBruijnLet(e1,e2,loc) 
-   | (DeBruijnLetRec(_,_,loc),[e1;e2]) -> DeBruijnLetRec(e1,e2,loc) 
-   | (Let(x,t,_,_,loc),[e1;e2]) -> Let(x,t,e1,e2,loc) 
+   | (Let(_,_,_,loc),[e1;e2;e3]) -> Let(e1,e2,e3,loc) 
    | (LetRec(x,t,_,_,loc),[e1;e2]) -> LetRec(x,t,e1,e2,loc) 
    | (If(_,_,_,loc), [e1;e2;e3]) -> If(e1,e2,e3,loc)
    | (For(_,_,_,_,loc), [e1;e2;e3;e4]) -> For(e1,e2,e3,e4,loc)
-   | _ -> failwith "this should not happen"
- 
+   | (Tuple(_,loc), l) -> Tuple(l,loc)
+   | (Function(_,loc), l) -> Function(l,loc)
+   | (Match(_,_,loc), e::l) -> Match(e,l,loc)
+   | (Case(_,_,loc), [e1;e2]) -> Case(e1,e2,loc)
+   | (TypedExpr(_,t,loc), [e]) -> TypedExpr(e,t,loc)
+   | _ -> failwith "revExps: This should not happen. Missing match case?"
 
 type 't preResult = More | Done of 't
  
@@ -105,26 +112,49 @@ let rec remove x = function
   | h::t when h = x -> t
   | l -> l
 
+let rec remove_all xs l = match xs with
+  | [] -> l
+  | x::t -> remove_all t (remove x l)
+
 let union l1 l2 = let rec punion = function
   | ([],l) -> l
   | (l,[]) -> l
-  | (h1::t1,h2::t2) when h1=h2 -> h1::punion (t1,t2)
-  | (h1::t1,h2::t2) when h1<h2 -> h1::punion (t1,h2::t2)
-  | (h1::t1,h2::t2) -> h2::punion (h1::t1,t2)
+  | (h1::t1,h2::t2) -> match compare h1 h2 with 
+      |  0  -> h1::punion (t1,t2)
+      | -1 -> h1::punion (t1,h2::t2)
+      |  1  -> h2::punion (h1::t1,t2)
+      | _ -> failwith "union: compare should return 0, -1, or 1"
  in punion (l1,l2)
 
 let var e = 
   let var_fold = function
      | (Var (x,_),_) -> [x]
-     | (Fun (x,_,_,_),[vs]) -> remove x vs
-     | (Let (x,_,_,_,_), [vs1;vs2]) -> union vs1 (remove x vs2)
+     | (Case _,[vs1;vs2]) -> remove_all vs1 vs2
+     | (Let _, [vsp;vs1;vs2]) -> union vs1 (remove_all vsp vs2)
      | (LetRec (x,_,_,_,_), [vs1;vs2]) -> remove x (union vs1 vs2)
      | (_,vs_list) -> List.fold_left union [] vs_list
   in postVisit var_fold e
 
+let pattern_vars e =
+  let var_fold = function
+     | (TypedExpr(Var(x,_),t,_),_) -> [x,t]
+     | (_,vs_list) -> List.fold_left union [] vs_list
+  in postVisit var_fold e
+     
+
 let vars = List.fold_left (fun l1  -> fun (_,(_,l2)) -> union l1 l2) []
 
-let rec free vlist = 
+let keys sigma = List.sort compare (List.fold_left (fun l -> fun (x,_) -> x::l) [] sigma)
+
+(* intersection of two ascending sorted lists *)
+let rec intersect l1 l2 = match (l1,l2) with
+  | ([],_) -> []
+  | (_,[]) -> []
+  | (h1::t1,h2::t2) when h1 = h2 -> h1::intersect t1 t2
+  | (h1::t1,h2::t2) when h1 < h2 -> intersect t1 l2
+  | (_,_::t2) -> intersect l1 t2
+
+let free_more n vlist = 
   let max = List.fold_left 
      (fun m -> fun x -> 
        if String.get x 0 <> 'x' 
@@ -132,7 +162,16 @@ let rec free vlist =
        else try let m' = int_of_string (String.sub x 1 (String.length x - 1))
             in max m m'
             with Failure _ -> m) 0 vlist 
-  in "x" ^ (string_of_int (max+1))
+  in let rec free i n = if i > n then [] else ("x" ^ (string_of_int (max+i)))::
+                             free (i+1) n
+    in free 1 n
+
+let free vlist = List.hd (free_more 1 vlist)
+
+let freesubst sigma vars capture =
+  let freeVars = free_more (List.length capture) vars in
+  let sigma' = List.map2 (fun x -> fun x' -> x,(Var (x',"new"), [x'])) capture freeVars in
+  sigma' @ sigma
 
 let rec invars x = function
   | [] -> false
@@ -140,47 +179,22 @@ let rec invars x = function
   | h::t when h = x -> true
   | _ -> false
 
-let increaseIndexes = List.map (fun (x,n) -> (x,n+1))
-
-let deBruijnify =
-  let rec deBruijnify sigma =
-    transform 
-    (function
-       | Var (x,l) -> Done (DeBruijnVar (List.assoc x sigma, l))
-       | Fun (x,_,e,l) -> Done (DeBruijnFun(deBruijnify ((x,0)::(increaseIndexes sigma)) e, l))
-       | Let (x,_,e1,e2,l) -> Done (DeBruijnLet(deBruijnify sigma e1, deBruijnify ((x,0)::(increaseIndexes sigma)) e2, l))
-       | LetRec (x,_,e1,e2,l) 
-         -> let deBruijn = deBruijnify ((x,0)::(increaseIndexes sigma)) 
-            in Done (DeBruijnLetRec(deBruijn e1, deBruijn e2, l))
-       | _ -> More)
-   (fun x -> x)
-  in deBruijnify []
-
-let rec deBruijnSubst n e =
-  transform 
-  (function
-     | DeBruijnVar (n', l) as v -> Done (if n = n' then e else v)
-     | DeBruijnFun(e', l) -> Done (DeBruijnFun(deBruijnSubst (n+1) e e',l))
-     | DeBruijnLet(e1', e2', l) -> Done (DeBruijnLet(deBruijnSubst n e e1', deBruijnSubst (n+1) e e2',l))
-     | DeBruijnLetRec(e1', e2', l) -> Done (DeBruijnLet(deBruijnSubst n e e1', deBruijnSubst (n+1) e e2',l))
-     | _ -> More)
- (fun x -> x)
-
 let rec substitute sigma = 
   transform 
   (function 
      | Var (x,l) -> (try 
                       let (sx,_) = List.assoc x sigma in Done sx 
                     with Not_found -> Done (Var (x,l)))
-     | Fun (x,t,e,l) 
-      -> let vs = vars sigma in
-           if invars x vs || List.mem_assoc x sigma 
-           then let x' = free (union vs (var e)) in
-                Done (Fun (x',t,(substitute ((x,(Var (x',"new"), [x']))::sigma) e),l))
-           else More
+     | Case (xe,e,l)
+       -> let vs = union (vars sigma) (keys sigma) and vx = var xe in
+            let capture = intersect vx vs in 
+               let sigma' = freesubst sigma (union vs (var e)) capture in
+                 Done (Case(substitute sigma' xe, substitute sigma' e, l))
      | _ -> More)
   (fun x -> x)
 
+
+let addVars = List.map (fun ((x:string),e) -> (x,(e, var e)))
 
 let subst x ex e = substitute [x,(ex, var ex)] e
 
@@ -196,7 +210,7 @@ let string_of_expr e =
   | (Ref _,[s]) -> "ref (" ^ s ^ ")"
   | (Deref _,[s]) -> "! (" ^ s ^ ")"
   | (Var (s,_),_) -> s
-  | (DeBruijnVar (n,_),_) -> "U" ^ string_of_int n
+  | (AnyVar _,_) -> "_"
   | (Op (_,b, _,_),[s1;s2]) -> "(" ^ s1 ^ (string_of_op b) ^ s2 ^ ")"
   | (Atrib _,[s1;s2]) -> "(" ^ s1 ^ ":=" ^ s2 ^ ")"
   | (If _,[s1;s2;s3]) ->
@@ -208,21 +222,23 @@ let string_of_expr e =
   | (Secv _,[s1;s2]) ->
     "(" ^ s1 ^ ";\n" ^ s2 ^ ")"
   | (Skip _, _) -> "()"
-  | (Fun (x,t,_,_),[s]) -> 
-    "(fun (" ^ x ^ ":" ^ string_of_tip t ^ ") -> " ^ s ^ ")"
-  | (Let (x,t,_,_,_),[s1;s2]) -> 
-    "(let " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
+  | (Fun _,[s]) -> 
+    "(fun " ^ s ^ ")"
+  | (TypedExpr(_,t,_),[s]) -> "(" ^ s ^ ":" ^ string_of_tip t ^ ")"
+  | (Let _,[sx;s1;s2]) -> 
+    "(let " ^ sx  ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
   | (LetRec (x,t,_,_,_),[s1;s2]) -> 
     "(let rec " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
-  | (DeBruijnFun _,[s]) -> 
-    "(fun -> " ^ s ^ ")"
-  | (DeBruijnLet _,[s1;s2]) -> 
-    "(let " ^ s1 ^ " in " ^ s2 ^ ")"
-  | (DeBruijnLetRec _,[s1;s2]) -> 
-    "(let rec " ^ s1 ^ " in " ^ s2 ^ ")"
   | (App _, [s1;s2]) -> 
-    " (" ^ s1 ^ s2 ^ ")"
-  | _ -> failwith "This should not happen"
+    "(" ^ s1 ^ " " ^ s2 ^ ")"
+  | (Tuple _, ls) ->
+    "(" ^ String.concat "," ls ^ ")"
+  | (Match _, s::ls) ->
+    "(" ^ "match " ^ s ^ " with " ^ String.concat " | " ls ^ ")"
+  | (Function _, ls) ->
+    "(" ^ "function " ^ String.concat " | " ls ^ ")"
+  | (Case _, [s1;s2]) -> s1 ^ " -> " ^ s2
+  | _ -> failwith "string_of_expr: this should not happen. Missing match case?"
   in postVisit string_of_expr_fold e
 
 let location = function
@@ -236,7 +252,7 @@ let location = function
   | Ref (_,l)
   | Deref (_,l)
   | Var (_,l)
-  | DeBruijnVar (_,l)
+  | AnyVar l  
   | Op (_, _, _,l)
   | Atrib (_,_,l)
   | If (_, _, _,l)
@@ -245,11 +261,13 @@ let location = function
   | Secv (_,_,l)
   | Skip l 
   | App (_,_,l)
-  | Fun (_,_,_,l)
-  | Let (_,_,_,_,l)
+  | Fun (_,l)
+  | TypedExpr (_,_,l)
+  | Let (_,_,_,l)
   | LetRec (_,_,_,_,l)
-  | DeBruijnFun (_,l)
-  | DeBruijnLet (_,_,l)
-  | DeBruijnLetRec (_,_,l)
+  | Tuple (_,l)
+  | Function (_,l)
+  | Match (_,_,l)
+  | Case (_,_,l)
   -> l
 

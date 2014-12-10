@@ -10,6 +10,7 @@ let rec update (x,n) = function
   | h::t -> h::(update (x,n) t)
 
 let update_or_add (x,v) m = (x,v)::List.remove_assoc x m
+let update_or_add_all l m = List.fold_left (fun m -> fun p -> update_or_add p m) m l
 
 let string_of_mem = 
   let string_of_pair (x,v) = string_of_int x ^ " |-> " ^ ImpAST.string_of_expr v in

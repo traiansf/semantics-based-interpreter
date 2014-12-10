@@ -30,6 +30,7 @@ let keyword_table = Hashtbl.create 20
     List.iter (fun (kwd, tok) -> Hashtbl.add keyword_table kwd tok)
   [
    ( "fun"          , FUN );
+   ( "function"     , FUNCTION );
    ( "int"          , TINT );
    ( "bool"         , TBOOL );
    ( "float"        , TFLOAT );
@@ -49,6 +50,8 @@ let keyword_table = Hashtbl.create 20
    ( "in"           , IN );
    ( "ref"          , REF );
    ( "Z"            , Z);
+   ( "match"        , MATCH );
+   ( "with"         , WITH );
 ]
 
 }
@@ -74,6 +77,9 @@ rule token = parse
   | ":="           { ASGNOP }
   | ":"            { COLON }
   | ';'            { SEQ }
+  | ','            { COMMA }
+  | '|'            { CHOICE }
+  | '_'            { WILD }
  | '!'            { DEREF }
   | ['A'-'Z' 'a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as id
                    { try Hashtbl.find keyword_table id 

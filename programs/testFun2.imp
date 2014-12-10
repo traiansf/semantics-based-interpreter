@@ -1,3 +1,4 @@
 let l1 : int ref = ref 0 in
 (fun (x : unit) -> l1 := 5 ; x ; x) (l1 := !l1 + 1) ;
 !l1
+// 5 for strict evaluation

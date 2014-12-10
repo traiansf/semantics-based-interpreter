@@ -3,24 +3,35 @@ open ImpAST
 
 exception TypeError of expr*tip*tip
 exception VarNotFound of expr
+exception AnyVarError of bool*string
 
-(* Type inference function *)
-let rec infertype m = function
+
+let rec inferPatternType inPattern m = function
   | Int (n,_) -> TInt
   | Bool (b,_) -> TBool
   | Float (f,_) -> TFloat
-  | Op(e1,Plus,e2,_) 
-  | Op(e1,Minus,e2,_) 
-  | Op(e1,Mul,e2,_) 
-  | Op(e1,Div,e2,_) 
+  | Skip _ -> TUnit
+  | Var (v,loc) -> (try 
+           lookup v m 
+     with Not_found -> raise (VarNotFound (Var(v, loc))))
+  | AnyVar loc when inPattern -> raise (AnyVarError (true,loc))
+  | TypedExpr (AnyVar _, t,_) when inPattern -> t
+  | TypedExpr (e, t,_) when inPattern -> (match inferPatternType true m e with
+          | t' when t'=t -> t
+          | t' -> raise (TypeError(e,t,t')))
+  | Tuple (l,_) when inPattern -> TProd (List.map (inferPatternType true m) l)
+  | e -> failwith ("infertype: expression " ^ string_of_expr e ^ " not allowed in a " ^ if inPattern then "pattern." else "program.")
+
+(* Type inference function *)
+let rec infertype m = function
+  | Op(e1,(Plus|Minus|Mul|Div),e2,_) 
     -> (match (infertype m e1, infertype m e2) with
      | (TInt, TInt) -> TInt
      | (TFloat, TFloat) -> TFloat
      | (TInt, t) -> raise (TypeError (e2, TInt, t))
      | (TFloat, t) -> raise (TypeError (e2, TFloat, t))
      | (t,_) -> raise (TypeError (e1, TInt, t)))
-  | Op(e1,Mic,e2,_) 
-  | Op(e1,MicS,e2,_) 
+  | Op(e1,(Mic|MicS),e2,_) 
     -> (match (infertype m e1, infertype m e2) with
      | (TInt, TInt) | (TFloat, TFloat)  -> TBool
      | (TInt, t)  -> raise (TypeError (e2, TInt, t))
@@ -35,15 +46,14 @@ let rec infertype m = function
           | TRef t -> t
           | t -> raise (TypeError (e, TRef t, t)))
   | Ref (e,_) -> TRef (infertype m e) 
-
-  | Var (v,loc) -> (try 
-           lookup v m 
-     with Not_found -> raise (VarNotFound (Var(v, loc))))
+  | AnyVar loc -> raise (AnyVarError (false, loc))
+  | TypedExpr (e,t,_) -> (match infertype m e with
+       | t' when t = t' -> t
+       | t' -> raise (TypeError (e,t,t')))
   | Atrib(e1,e2,loc) -> (match (infertype m e1, infertype m e2) with
        | (TRef t1, t2) when t1 = t2 -> TUnit
        | (TRef t, t') -> raise (TypeError (e2, t, t'))
        | (t, t') -> raise (TypeError (e1, TRef t', t)))
-  | Skip _ -> TUnit
   | Secv (e1,e2,_) -> (match (infertype m e1, infertype m e2) with
      | (TUnit,t) -> t
      | (t1,_) -> raise (TypeError (e1, TUnit, t1)))
@@ -65,17 +75,29 @@ let rec infertype m = function
   | IntOfFloat _ -> TArrow(TFloat, TInt)
   | FloatOfInt _ -> TArrow(TInt, TFloat)
   | Z _ -> TArrow(TArrow(TArrow(TInt,TInt),TArrow(TInt,TInt)),TArrow(TInt,TInt))
-  | Fun (x,t,e,_) -> TArrow(t, infertype (update_or_add (x,t) m) e)
-  | Let (x,t,e1,e2,_) 
-    -> (match (infertype m e1, infertype (update_or_add (x,t) m) e2) with
-         | (t1,t2) when t1 = t -> t2
-         | (t1,_) -> raise (TypeError (e1,t,t1)))
+  | Fun (e,_) -> infertype m e
+  | Function (fstCase::choices,_) 
+    -> let t = infertype m fstCase in
+         List.iter (fun choice ->
+              (match infertype m choice with
+                 | t' when t' = t -> ()
+                 | t' -> raise (TypeError (choice, t, t')))) choices ; t
+  | Let (Var(x,_),e1,e2,_) 
+    -> let t = infertype m e1 in
+       infertype (update_or_add (x,t) m) e2
+  | Let (p,e1,e2,l) -> infertype m (App (Fun (Case(p,e2,l),l),e1,l))
   | LetRec (x,t,e1,e2,_) 
     -> let infertype' = infertype (update_or_add (x,t) m)
        in (match (infertype' e1, infertype' e2) with
              | (t1,t2) when t1 = t -> t2
              | (t1,_) -> raise (TypeError (e1,t,t1)))
-  | e -> failwith ("Expression " ^ string_of_expr e ^ " not allowed in a program.")
+  | Match (e,choices,l) -> infertype m (App(Function(choices,l),e,l)) 
+  | Case (p,e,_)
+   -> let mp = pattern_vars p in 
+      let tp = inferPatternType true mp p and m' = update_or_add_all mp m in
+      TArrow(tp, infertype m' e)
+  | Tuple (l,_) -> TProd (List.map (infertype m) l)
+  | e -> inferPatternType false m e
 
 
 let type_check e = try
@@ -83,5 +105,7 @@ let type_check e = try
   with 
     | TypeError (e,t1,t2) -> Printf.eprintf "%s\nError: Error: This expression has type %s but an expression was expected of type %s\n"  (location e) (string_of_tip t2) (string_of_tip t1) ; false
     | VarNotFound e -> Printf.eprintf "%s\nError: Variable %s unbound.\n"  (location e) (string_of_expr e) ; false
+    | AnyVarError (true, loc) -> Printf.eprintf "%s\nError: Anonymous Variable untyped in pattern.\n" loc ; false
+    | AnyVarError (false, loc) -> Printf.eprintf "%s\nError: Anonymous Variable not allowed here.\n"  loc ; false
 
 
