@@ -1,0 +1,4 @@
+type intOption = Some of int | None
+let prec = fun (i:int) -> if i <= 0 then None else Some (i - 1) in
+prec 3
+

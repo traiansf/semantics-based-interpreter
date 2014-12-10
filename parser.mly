@@ -18,12 +18,15 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token <int> INT
 %token <float> FLOAT
 %token <string> LOC
-%token <string> VAR
+%token <string> ID
+%token <string> VARIANT
 %token WILD
 %token TRUE FALSE
 %token SEQ SKIP
 %token COMMA
 %token MATCH WITH CHOICE
+%token TYPE OF
+%token DOUBLESEQ
 %token IF THEN ELSE
 %token WHILE DO DONE
 %token FOR
@@ -49,12 +52,31 @@ let parseError loc = raise (Lexer.ParseError loc)
 %left MUL DIV
 %nonassoc INT_CAST FLOAT_CAST
 %left APPX
-%nonassoc DEREF REF      /* highest precedence */
+%nonassoc DEREF REF /* highest precedence */
 %start main             /* the entry point */
 %type <ImpAST.expr> main
 %%
 main:
-    expr EOF                { $1 }
+   | decls EOF                { Decls($1, location()) }
+;
+
+decls:
+   | decl decls                   {$1::$2}
+   | expr                         {[$1]}
+;
+
+decl:
+  TYPE ID EQ typecases          { VarTypeDecl($2,$4, location()) }
+;
+
+typecases:
+   | typecase CHOICE typecases         {$1::$3}
+   | typecase                   {[$1]}
+;
+
+typecase:
+   | VARIANT OF tip            {VarTypeCase($1, $3, location())}
+   | VARIANT                   {ConstTypeCase($1, location())}
 ;
 
 tip:
@@ -75,6 +97,7 @@ basetip:
   | tip ARROW tip              { TArrow ($1, $3) }
   | LPAREN tip RPAREN          { $2 }
   | tip REF                    { TRef $1 }
+  | ID                         { DefType($1) }
 ;
 
 expr: 
@@ -103,12 +126,14 @@ baseexpr:
                                { For ($3, $5, $7, $9, location()) }
   | FUN choice                 { Fun ($2, location()) }
   | FUNCTION choices           { Function ($2, location()) }
-  | LET REC VAR COLON tip EQ expr IN expr %prec FUNX
+  | LET REC ID COLON tip EQ expr IN expr %prec FUNX
                                { LetRec ($3, $5, $7, $9, location()) }
   | LET expr EQ expr IN expr %prec FUNX
                                { Let ($2, $4, $6, location()) }
   | MATCH expr WITH choices    { Match ($2, $4, location()) }
   | expr funexpr               { App ($1, $2, location()) }
+  | VARIANT expr               { Variant($1, $2, location()) }
+  | VARIANT                    { Const($1, location()) }
   | funexpr                    { $1 }
   | error                      { parseError (location ()) }
 ;
@@ -128,7 +153,7 @@ funexpr:
   | TRUE                       { Bool (true, location()) }
   | FALSE                      { Bool (false, location()) }
   | SKIP                       { Skip (location()) }
-  | VAR                        { Var ($1,location()) }
+  | ID                        { Var ($1,location()) }
   | WILD                       { AnyVar (location()) }
   | INT_CAST                   { IntOfFloat (location()) }
   | FLOAT_CAST                 { FloatOfInt (location()) }

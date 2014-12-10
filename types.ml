@@ -3,27 +3,44 @@ open ImpAST
 
 exception TypeError of expr*tip*tip
 exception VarNotFound of expr
+exception UntypedVarError of expr
 exception AnyVarError of bool*string
+exception VariantError of expr
+exception InvalidExpression of expr * bool
 
 
-let rec inferPatternType inPattern m = function
+let addVariants m t cases = List.fold_left (fun m -> function VarTypeCase(v,t',_) -> (v,TArrow(t',t))::m
+                                                       | ConstTypeCase(v,_) -> (v,t)::m
+                                                       | _ -> failwith ("addVariants: should only have variant decls here")
+                                           ) m cases
+
+let rec inferPatternType inPattern m = 
+ let infertype =  if inPattern then inferPatternType true else infertype in
+  function
   | Int (n,_) -> TInt
   | Bool (b,_) -> TBool
   | Float (f,_) -> TFloat
   | Skip _ -> TUnit
-  | Var (v,loc) -> (try 
+  | Var (v,loc) as var -> if inPattern then raise (UntypedVarError var) else (try 
            lookup v m 
-     with Not_found -> raise (VarNotFound (Var(v, loc))))
-  | AnyVar loc when inPattern -> raise (AnyVarError (true,loc))
+     with Not_found -> raise (VarNotFound var))
+  | AnyVar loc -> raise (AnyVarError (inPattern,loc))
+  | TypedExpr (Var _, t,_) when inPattern -> t
   | TypedExpr (AnyVar _, t,_) when inPattern -> t
-  | TypedExpr (e, t,_) when inPattern -> (match inferPatternType true m e with
+  | TypedExpr (e, t,_) -> (match infertype m e with
           | t' when t'=t -> t
           | t' -> raise (TypeError(e,t,t')))
-  | Tuple (l,_) when inPattern -> TProd (List.map (inferPatternType true m) l)
-  | e -> failwith ("infertype: expression " ^ string_of_expr e ^ " not allowed in a " ^ if inPattern then "pattern." else "program.")
-
+  | Tuple (l,_) -> TProd (List.map (infertype m) l)
+  | Variant (v,e,_) as var -> (try (match (lookup v m, infertype m e) with
+                              | (TArrow(t,t'),te) when t=te -> t'
+                              | (TArrow(t,t'),te) -> raise (TypeError (e,t,te))
+                              | _ -> failwith("inferPatternType - variant type should be an arrow type.")
+                        ) with Not_found -> raise (VariantError var))
+  | Const (v,_) as const -> (try lookup v m with Not_found -> raise (VariantError const))
+  | e -> raise (InvalidExpression (e, inPattern)) 
+and
 (* Type inference function *)
-let rec infertype m = function
+  infertype m = function
   | Op(e1,(Plus|Minus|Mul|Div),e2,_) 
     -> (match (infertype m e1, infertype m e2) with
      | (TInt, TInt) -> TInt
@@ -46,10 +63,6 @@ let rec infertype m = function
           | TRef t -> t
           | t -> raise (TypeError (e, TRef t, t)))
   | Ref (e,_) -> TRef (infertype m e) 
-  | AnyVar loc -> raise (AnyVarError (false, loc))
-  | TypedExpr (e,t,_) -> (match infertype m e with
-       | t' when t = t' -> t
-       | t' -> raise (TypeError (e,t,t')))
   | Atrib(e1,e2,loc) -> (match (infertype m e1, infertype m e2) with
        | (TRef t1, t2) when t1 = t2 -> TUnit
        | (TRef t, t') -> raise (TypeError (e2, t, t'))
@@ -94,18 +107,27 @@ let rec infertype m = function
   | Match (e,choices,l) -> infertype m (App(Function(choices,l),e,l)) 
   | Case (p,e,_)
    -> let mp = pattern_vars p in 
-      let tp = inferPatternType true mp p and m' = update_or_add_all mp m in
+      let m' = update_or_add_all mp m in
+      let tp = inferPatternType true m' p in 
       TArrow(tp, infertype m' e)
-  | Tuple (l,_) -> TProd (List.map (infertype m) l)
+  | Decls(VarTypeDecl(x,cases,_)::dt,loc)
+    -> let m' = addVariants m (DefType x) cases in infertype m' (Decls(dt,loc))
+  | Decls([e],_) -> infertype m e
+  | Decls(e::t,_) -> raise (InvalidExpression (e,false))
   | e -> inferPatternType false m e
 
 
 let type_check e = try
      let _ = infertype [] e in true
   with 
-    | TypeError (e,t1,t2) -> Printf.eprintf "%s\nError: Error: This expression has type %s but an expression was expected of type %s\n"  (location e) (string_of_tip t2) (string_of_tip t1) ; false
+    | TypeError (e,t1,t2) -> Printf.eprintf "%s\nError: This expression has type %s but an expression was expected of type %s\n"  (location e) (string_of_tip t2) (string_of_tip t1) ; false
     | VarNotFound e -> Printf.eprintf "%s\nError: Variable %s unbound.\n"  (location e) (string_of_expr e) ; false
+    | UntypedVarError e -> Printf.eprintf "%s\nError: Variable %s not typed in pattern.\n"  (location e) (string_of_expr e) ; false
     | AnyVarError (true, loc) -> Printf.eprintf "%s\nError: Anonymous Variable untyped in pattern.\n" loc ; false
     | AnyVarError (false, loc) -> Printf.eprintf "%s\nError: Anonymous Variable not allowed here.\n"  loc ; false
+    | InvalidExpression (e,inPattern)  -> Printf.eprintf "%s\nError: Expression not allowed in %s.\n"  (location e) (if inPattern then "pattern" else "program") ; false
+    | VariantError (Variant(x,_,loc)) -> Printf.eprintf "%s\nError: Constructor %s was not previously defined.\n"  loc x ; false
+    | VariantError (Const(x,loc)) -> Printf.eprintf "%s\nError: Constructor %s was not previously defined.\n"  loc x ; false
+
 
 

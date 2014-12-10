@@ -1,0 +1,2 @@
+type intList = Nil | Cons of int * intList
+Cons(5,Cons(7,Cons(10,Nil)))

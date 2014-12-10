@@ -1,0 +1,2 @@
+(fun (x : int * int * (int * int)) -> match x with ((a:int),(b:int),((c:int),(d:int))) -> a + b + c + d) (1,2,(3,4))
+

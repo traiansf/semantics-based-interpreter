@@ -53,6 +53,8 @@ let keyword_table = Hashtbl.create 20
    ( "Z"            , Z);
    ( "match"        , MATCH );
    ( "with"         , WITH );
+   ( "type"         , TYPE );
+   ( "of"           , OF );
 ]
 
 }
@@ -78,12 +80,14 @@ rule token = parse
   | ":="           { ASGNOP }
   | ":"            { COLON }
   | ';'            { SEQ }
+  | ";;"           { DOUBLESEQ }
   | ','            { COMMA }
   | '|'            { CHOICE }
   | '_'            { WILD }
  | '!'            { DEREF }
-  | ['A'-'Z' 'a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as id
+  | ['A'-'Z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as variant   { VARIANT(variant) }
+  | ['a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as id
                    { try Hashtbl.find keyword_table id 
-                     with Not_found -> VAR(id) }
+                     with Not_found -> ID(id) }
   | eof            { EOF }
   | _              { lex_error lexbuf }

@@ -23,6 +23,7 @@ type tip = TInt | TFloat | TBool | TUnit
   | TArrow of tip * tip 
   | TRef of tip
   | TProd of tip list
+  | DefType of string
 let rec string_of_tip = function
   | TInt -> "int"
   | TFloat -> "float"
@@ -31,6 +32,7 @@ let rec string_of_tip = function
   | TArrow (t1,t2) -> "(" ^ string_of_tip t1 ^ " -> " ^ string_of_tip t2 ^ ")"
   | TRef t -> string_of_tip t ^ " ref"
   | TProd(l) -> "(" ^ String.concat " * " (List.map string_of_tip l) ^ ")"
+  | DefType s -> s
 
 
 type expr =
@@ -58,6 +60,12 @@ type expr =
   | Tuple of expr list * locatie
   | Match of expr * expr list * locatie
   | Case of expr * expr * locatie
+  | Decls of expr list * locatie
+  | VarTypeDecl of string * expr list * locatie
+  | VarTypeCase of string * tip * locatie
+  | ConstTypeCase of string * locatie
+  | Variant of string * expr * locatie
+  | Const of string * locatie
 
 let exps = function
  | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _
@@ -73,6 +81,13 @@ let exps = function
  | Tuple(l,_) -> l
  | Match(e,l,_) -> e::l
  | Function(l,_) -> l
+ | Decls (l,_) 
+ | VarTypeDecl (_,l,_) -> l
+ | VarTypeCase _ 
+ | ConstTypeCase _ 
+ | Const _ -> []
+ | Variant (_,e,_) -> [e]
+
 
 let revExps = function
    | (e,[]) -> e
@@ -93,6 +108,9 @@ let revExps = function
    | (Match(_,_,loc), e::l) -> Match(e,l,loc)
    | (Case(_,_,loc), [e1;e2]) -> Case(e1,e2,loc)
    | (TypedExpr(_,t,loc), [e]) -> TypedExpr(e,t,loc)
+   | (Decls (_,loc), l) -> Decls (l,loc) 
+   | (VarTypeDecl (x,_,loc), l) -> VarTypeDecl(x,l,loc)
+   | (Variant (x,_,loc), [e]) -> Variant(x,e,loc)
    | _ -> failwith "revExps: This should not happen. Missing match case?"
 
 type 't preResult = More | Done of 't
@@ -238,6 +256,12 @@ let string_of_expr e =
   | (Function _, ls) ->
     "(" ^ "function " ^ String.concat " | " ls ^ ")"
   | (Case _, [s1;s2]) -> s1 ^ " -> " ^ s2
+  | (Decls (_,_), sl) -> String.concat "\n\n" sl
+  | (VarTypeDecl (x,_,_), sl) -> "type " ^ x ^ " = \n    " ^ String.concat "\n  | " sl
+  | (Variant (x,_,_), [s]) -> x ^ " " ^ s 
+  | (VarTypeCase (x,t,_),[]) -> x ^ " of " ^ string_of_tip t
+  | (ConstTypeCase (x,_),[]) -> x
+  | (Const (x,_),[]) -> x
   | _ -> failwith "string_of_expr: this should not happen. Missing match case?"
   in postVisit string_of_expr_fold e
 
@@ -269,5 +293,11 @@ let location = function
   | Function (_,l)
   | Match (_,_,l)
   | Case (_,_,l)
+  | Decls (_,l) 
+  | VarTypeDecl (_,_,l)
+  | VarTypeCase (_,_,l) 
+  | ConstTypeCase (_,l) 
+  | Const (_,l)
+  | Variant (_,_,l)
   -> l
 

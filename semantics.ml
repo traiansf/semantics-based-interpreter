@@ -6,8 +6,9 @@ let is_fun = function
   | _ -> false
 
 let rec is_val = function
-  | Bool _ | Int _ | Float _ | Loc _ | Skip _ -> true
+  | Bool _ | Int _ | Float _ | Loc _ | Skip _ | Const _ -> true
   | Tuple (l,_) -> List.fold_left (fun b -> fun e -> b && is_val e) true l 
+  | Variant (x,e,_) -> is_val e
   | e -> is_fun e
 
 let matchPattern p e =
@@ -25,6 +26,8 @@ let matchPattern p e =
     | (Skip _::pt, Skip _::et) -> matchPattern pt et sigma
     | (Var (x,_)::pt, e::et) -> matchPattern pt et ((x,e)::sigma)
     | (AnyVar _::pt, e::et) -> matchPattern pt et sigma
+    | (Const (c,_)::pt, Const (c',_)::et) when c = c' -> matchPattern pt et sigma
+    | (Variant (v,p,_)::pt, Variant (v',e,_)::et) when v = v' -> matchPattern (p::pt) (e::et) sigma
     | _ -> raise Not_found
   in matchPattern [p] [e] []
 
@@ -137,6 +140,14 @@ let rec reduce = function
     (match reduce (e,s) with Some (e',s') -> Some (Fun (x,t,e',loc),s') 
       | None -> None)
 *)
+
+
+  | (Decls(VarTypeDecl _::dt,loc), s) ->  Some (Decls(dt,loc), s)
+  | (Decls([e],loc), s) ->  Some (e, s)
+  | (Variant (x,e,loc),s)
+   -> (match reduce (e,s) with
+           | Some (e',s') -> Some (Variant (x,e',loc),s')
+           | None -> None)
   | _ -> None                                                    (*default*)
 
 

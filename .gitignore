@@ -1,0 +1,7 @@
+*.cmi
+*.cmo
+.*.swp
+imp
+lexer.ml
+parser.ml
+parser.mli

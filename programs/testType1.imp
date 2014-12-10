@@ -1,0 +1,2 @@
+type stringOption = Some of string | None
+5
