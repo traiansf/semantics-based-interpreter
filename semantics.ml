@@ -147,9 +147,16 @@ let rec reduce = function
       | None -> None)
 *)
 
-
+  | (Tuple (v::l, loc),s) when is_val v
+    -> (match reduce (Tuple (l,loc), s) with
+            | Some (Tuple (l',_), s') -> Some (Tuple(v::l',loc),s')
+            | _ -> None)
+  | (Tuple (e::l, loc),s) 
+    -> (match reduce (e,s) with
+            | Some (e',s') -> Some (Tuple(e'::l,loc), s')
+            | None -> None)
   | (Decls(VarTypeDecl _::dt,loc), s) ->  Some (Decls(dt,loc), s)
- | (Decls([e],loc), s) ->  Some (e, s)
+  | (Decls([e],loc), s) ->  Some (e, s)
   | (Variant (x,e,loc),s)
    -> (match reduce (e,s) with
            | Some (e',s') -> Some (Variant (x,e',loc),s')

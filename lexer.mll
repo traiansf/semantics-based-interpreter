@@ -88,7 +88,7 @@ rule token = parse
   | '_'            { WILD }
  | '!'            { DEREF }
   | ['A'-'Z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as variant   { VARIANT(variant) }
-  | ['a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as id
+  | ['a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_' '\''] * as id
                    { try Hashtbl.find keyword_table id 
                      with Not_found -> ID(id) }
   | eof            { EOF }

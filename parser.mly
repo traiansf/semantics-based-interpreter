@@ -40,6 +40,7 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token TINT TBOOL TUNIT TFLOAT TSTRING
 %token ARROW FUNX
 %token EOF
+%left COMMA
 %left CHOICE /* lowest precedence */
 %nonassoc FUNX
 %right ARROW
@@ -84,6 +85,7 @@ typecase:
 ;
 
 tip:
+  | tip ARROW tip             { TArrow ($1, $3) }
   | basetip MUL prodtip       { TProd($1::$3) }
   | basetip                   { $1 }
 ;
@@ -99,23 +101,16 @@ basetip:
   | TUNIT                      {TUnit}
   | TSTRING                    {TString}
   | TFLOAT                     {TFloat}
-  | tip ARROW tip              { TArrow ($1, $3) }
   | LPAREN tip RPAREN          { $2 }
-  | tip REF                    { TRef $1 }
+  | basetip REF                { TRef $1 }
   | ID                         { DefType($1) }
 ;
 
-expr: 
-  | baseexpr COMMA exprtuple { Tuple($1::$3, location()) }
-  | baseexpr                 { $1 }
-;
+complextip:
+  | tip                        { $1 }
 
-exprtuple:
-  | baseexpr COMMA exprtuple { $1::$3 }
-  | baseexpr                 { [$1] }
-;
 
-baseexpr:
+expr:
   | expr PLUS expr             { Op ($1,Plus,$3, location()) }
   | expr MINUS expr             { Op ($1,Minus,$3, location()) }
   | expr MUL expr             { Op ($1,Mul,$3, location()) }
@@ -164,7 +159,7 @@ funexpr:
   | WILD                       { AnyVar (location()) }
   | INT_CAST                   { IntOfFloat (location()) }
   | FLOAT_CAST                 { FloatOfInt (location()) }
-  | LPAREN expr RPAREN         { $2 }
+  | LPAREN tupexpr RPAREN         { $2 }
   | DEREF expr                 { Deref ($2, location()) }
   | REF expr                   { Ref ($2, location()) }
   | typedexpr                  { $1 }
@@ -172,3 +167,15 @@ funexpr:
 
 typedexpr:
   | LPAREN expr COLON tip RPAREN { TypedExpr($2, $4, location()) }
+
+tupexpr: 
+  | expr COMMA exprtuple { Tuple($1::$3, location()) }
+  | expr                 { $1 }
+;
+
+exprtuple:
+  | expr COMMA exprtuple { $1::$3 }
+  | expr                 { [$1] }
+;
+
+

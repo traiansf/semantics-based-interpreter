@@ -22,10 +22,19 @@ type state =
   | ConsState of ((string*int)*state)
 ;;
 
+type stateOption =
+    NoState
+  | SomeState of state
+;;
 
 type intOption =
     NoInt
   | SomeInt of int
+;;
+
+type configOption =
+    NoConfig
+  | SomeConfig of e * state
 ;;
 
 let rec lookup : string -> state -> intOption = fun (x:string) -> function
@@ -34,30 +43,25 @@ let rec lookup : string -> state -> intOption = fun (x:string) -> function
     -> if x=y then SomeInt v else lookup x s
 ;;
 
-let test_pgm = Secv(Atrib("y", Int 0),
-                    While(Op(Int 1,Mic, Loc "x"),
-                          Secv(Atrib("y", Op(Loc "y", Plus, Loc "x")),
-                               Atrib("x", Op(Loc "x", Plus, Int (-1))))))
+let rec update : string*int -> state -> stateOption
+  = fun ((x:string),(n:int)) -> function
+        EmptyState -> NoState
+      | ConsState(((y:string),(v:int)),(s:state))
+        -> if x=y
+           then SomeState (ConsState((x,n),s))
+           else match update (x,n) s with
+               NoState -> NoState
+             | SomeState (s':state) -> SomeState (ConsState((y,v),s'))
 ;;
-let test_state = fun (n:int) -> ConsState(("x",n),ConsState(("y",0),EmptyState))
-;;
-let test_config = fun (n:int) -> (test_pgm,test_state n)
-;;
-
-"x";;
-(*
-
-let rec update (x,n) = function
-  | [] -> None
-  | (y,v)::s  when x=y -> Some ((x,n)::s)
-  | h::t -> match update (x,n) t with None -> None | Some t' -> Some (h::t')
 
 (* Configuration is described as an expression-state pair *)
-type config = e * state
+(* type config = e * state *)
+
 
 (* The reduce function defines the one step relation.  It is again partial
    as it has to account for final and stuck configurations  *)
-let rec reduce = function
+let rec reduce : e * state -> configOption = function
+(*
   | (Op(Int n1,Plus,Int n2),s) -> Some (Int (n1+n2),s)             (*Op+*)
   | (Op(Int n1,Mic,Int n2),s) -> Some (Bool (n1<=n2),s)            (*Op<=*)
   | (Op(Int n1,op,e2),s) ->                                        (*OpD*)
@@ -99,8 +103,24 @@ let rec reduce = function
       | Some (e',s') -> Some (If(e',e1,e2),s')
     )
   | (While(e1,e2),s) -> Some (If(e1,Secv(e2,While(e1,e2)),Skip),s) (*While*)
-  | _ -> None                                                      (*default*)
+*)
+   (_:e*state) -> NoConfig
+;;
 
+
+let test_pgm = Secv(Atrib("y", Int 0),
+                    While(Op(Int 1,Mic, Loc "x"),
+                          Secv(Atrib("y", Op(Loc "y", Plus, Loc "x")),
+                               Atrib("x", Op(Loc "x", Plus, Int (-1))))))
+;;
+let test_state = fun (n:int) -> ConsState(("x",n),ConsState(("y",0),EmptyState))
+;;
+let test_config = fun (n:int) -> (test_pgm,test_state n)
+;;
+
+reduce (test_config 10);;
+
+(*
 
 (* evaluate basically computes the transitive closure ->* of the
    one step reduction relation. *)

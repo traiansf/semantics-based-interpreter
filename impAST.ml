@@ -11,12 +11,12 @@ type op =
 
 let string_of_op = function
   | Plus -> "+"
-  | Equal -> "="
   | Minus -> "-"
   | Mul -> "*"
   | Div -> "/"
   | MicS -> "<"
   | Mic -> "<="
+  | Equal -> "="
 
 let string_of_l s = "_loc" ^ string_of_int s ^ "_"
 
