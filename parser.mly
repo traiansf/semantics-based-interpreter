@@ -11,10 +11,7 @@ open Lexing  (* Lexing is a predefined library used for lexing *)
    parsed *)
 let location () =  let start_pos = Parsing.symbol_start_pos () in
     let end_pos = Parsing.symbol_end_pos () in
-    Printf.sprintf "%s:%d.%d-%d.%d"
-      start_pos.pos_fname
-      start_pos.pos_lnum (start_pos.pos_cnum - start_pos.pos_bol)
-      end_pos.pos_lnum (end_pos.pos_cnum - end_pos.pos_bol)
+    (start_pos.pos_fname,start_pos.pos_lnum, start_pos.pos_cnum - start_pos.pos_bol, end_pos.pos_lnum, end_pos.pos_cnum - end_pos.pos_bol)
 
 (* Throws a ParseError with the specified location*)
 let parseError loc = raise (Lexer.ParseError loc)

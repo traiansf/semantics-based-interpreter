@@ -1,11 +1,16 @@
 open Mem
 open ImpAST
 
+(** Type exception. [TypeError(e,t1,t2)] says that the expected type for
+    [e] was [t1], but the computed type is [t2]. *)
 exception TypeError of expr*tip*tip
+(** Should take as argument a variable and says that that variable is unbound *)
 exception VarNotFound of expr
 
-(* Type inference function *)
-let rec infertype m = function
+(** Type inference function. Implements the typing rules, but also adds cases
+    for failures to better localize the error. 
+    @param m the typing environment, mapping variables to types. *)
+let rec infertype (m:(string*tip) list) : expr -> tip = function
   | Int (n,_) -> TInt
   | Bool (b,_) -> TBool
   | Float (f,_) -> TFloat
@@ -64,7 +69,6 @@ let rec infertype m = function
      | (t1,t2) -> raise (TypeError (e1,TArrow(t2,t2),t1)))
   | IntOfFloat _ -> TArrow(TFloat, TInt)
   | FloatOfInt _ -> TArrow(TInt, TFloat)
-  | Z _ -> TArrow(TArrow(TArrow(TInt,TInt),TArrow(TInt,TInt)),TArrow(TInt,TInt))
   | Fun (x,t,e,_) -> TArrow(t, infertype (update_or_add (x,t) m) e)
   | Let (x,t,e1,e2,_) 
     -> (match (infertype m e1, infertype (update_or_add (x,t) m) e2) with
@@ -78,10 +82,13 @@ let rec infertype m = function
   | e -> failwith ("Expression " ^ string_of_expr e ^ " not allowed in a program.")
 
 
+(** Type checks a program using the [infertype] function in the empty type 
+    environment.  If the program typechecks, returns true.  If not, prints
+    and adequate message and returns false. *)
 let type_check e = try
      let _ = infertype [] e in true
   with 
-    | TypeError (e,t1,t2) -> Printf.eprintf "%s\nError: Error: This expression has type %s but an expression was expected of type %s\n"  (location e) (string_of_tip t2) (string_of_tip t1) ; false
-    | VarNotFound e -> Printf.eprintf "%s\nError: Variable %s unbound.\n"  (location e) (string_of_expr e) ; false
+    | TypeError (e,t1,t2) -> Printf.eprintf "%s\nError: This expression has type %s but an expression was expected of type %s\n"  (string_of_locatie (location e)) (string_of_tip t2) (string_of_tip t1) ; false
+    | VarNotFound e -> Printf.eprintf "%s\nError: Variable %s unbound.\n"  (string_of_locatie (location e)) (string_of_expr e) ; false
 
 

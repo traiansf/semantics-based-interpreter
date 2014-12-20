@@ -6,12 +6,12 @@ open Parser        (* The type token is defined in parser.mli *)
   Type of exception used for lexer errors.
   Parameter:  location in the file.
  *)
-exception LexerError of string
+exception LexerError of ImpAST.locatie
 (**
   Type of exception used for parser errors.
   Parameter:  location in the file
  *)
-exception ParseError of string
+exception ParseError of ImpAST.locatie
 
 (**  
   Incrementing line numbers (at line breaks) while tokenizing
@@ -38,7 +38,7 @@ let lex_error lexbuf =
            let file = curr.Lexing.pos_fname
            and line = curr.Lexing.pos_lnum
            and cnum = curr.Lexing.pos_cnum - curr.Lexing.pos_bol in
-              raise (LexerError (Printf.sprintf "%s:%d.%d" file line cnum))
+              raise (LexerError (file,line,cnum,line,cnum))
          end
 
 (**
