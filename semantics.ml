@@ -83,7 +83,7 @@ let rec reduce = function
     -> Some (Int (int_of_float f, loc), s)
   | (App (FloatOfInt _, Int (n,_), loc), s)                     (*FloatOfInt*)
     -> Some (Float (float_of_int n, loc), s)
-  | ((App (Fun(x,_,e1,_),e2,_) | Let (x,_,e2,e1,_)),s) when is_val e2 
+  | ((App (Fun(x,_,e1,_),e2,_) | Let (x,e2,e1,_)),s) when is_val e2 
     -> Some (subst x e2 e1, s)                                  (*App&Let *)
   | (App (e1, e2, loc), s) when is_fun e1                       (*AppR*)
      -> (match reduce (e2,s) with Some (e2',s') -> Some (App(e1,e2',loc),s')
@@ -91,9 +91,9 @@ let rec reduce = function
   | (App (e1, e2, loc), s)                                      (*AppS*)
      -> (match reduce (e1,s) with Some (e1',s') -> Some (App(e1',e2,loc),s')
       | None -> None)
-  | (Let (x, t, e2, e1, loc), s)                                (*LetS*)
+  | (Let (x, e2, e1, loc), s)                                   (*LetS*)
      -> (match reduce (e2,s) with 
-           |Some (e2',s') -> Some (Let (x,t,e2',e1,loc),s')
+           |Some (e2',s') -> Some (Let (x,e2',e1,loc),s')
            | None -> None)
   | (LetRec (x, t, e2, e1, loc), s)                             (*LetRec*)
      -> Some (subst x (LetRec (x, t, e2, e2, loc)) e1, s)

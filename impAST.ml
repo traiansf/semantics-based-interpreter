@@ -77,7 +77,7 @@ type expr =                                    (** e ::= *)
   | App of expr * expr * locatie                   (** | e e *)
   | IntOfFloat of locatie                          (** | int_of_float *)
   | FloatOfInt of locatie                          (** | float_of_int *)
-  | Let of string * tip * expr * expr * locatie    (** | let x:T = e in e *)
+  | Let of string * expr * expr * locatie          (** | let x = e in e *)
   | LetRec of string * tip * expr * expr * locatie (** | let rec x:T = e in e *)
   | Ref of expr * locatie                          (** | ref e *)
   | Deref of expr * locatie                        (** | ! e *)
@@ -92,7 +92,7 @@ let location = function
   | If (_, _, _,l) | While (_, _,l) | For (_, _, _, _,l)
   | Secv (_,_,l) | Skip l 
   | Var (_,l) | App (_,_,l) | Fun (_,_,_,l) | IntOfFloat l | FloatOfInt l
-  | Let (_,_,_,_,l) | LetRec (_,_,_,_,l)
+  | Let (_,_,_,l) | LetRec (_,_,_,_,l)
   -> l
 
 (** Returns the list of (direct) subexpressions of a given expression *)
@@ -103,7 +103,7 @@ let exps : expr -> expr list  = function
  | Ref (e,_) | Deref (e,_) | Fun(_,_,e,_) 
    -> [e]
  | Atrib(e1,e2,_) | Op(e1,_,e2,_) | Secv(e1,e2,_) | While(e1,e2,_) 
- | App(e1,e2,_) | Let (_,_,e1,e2,_) | LetRec (_,_,e1,e2,_) 
+ | App(e1,e2,_) | Let (_,e1,e2,_) | LetRec (_,_,e1,e2,_) 
    -> [e1;e2]
  | If(e1,e2,e3,_)
    -> [e1;e2;e3]
@@ -126,7 +126,7 @@ let revExps : expr * expr list -> expr = function
    | (Secv(_,_,loc),[e1;e2]) -> Secv(e1,e2,loc) 
    | (While(_,_,loc),[e1;e2]) -> While(e1,e2,loc) 
    | (App(_,_,loc),[e1;e2]) -> App(e1,e2,loc) 
-   | (Let(x,t,_,_,loc),[e1;e2]) -> Let(x,t,e1,e2,loc) 
+   | (Let(x,_,_,loc),[e1;e2]) -> Let(x,e1,e2,loc) 
    | (LetRec(x,t,_,_,loc),[e1;e2]) -> LetRec(x,t,e1,e2,loc) 
    | (If(_,_,_,loc), [e1;e2;e3]) -> If(e1,e2,e3,loc)
    | (For(_,_,_,_,loc), [e1;e2;e3;e4]) -> For(e1,e2,e3,e4,loc)
@@ -202,7 +202,7 @@ let var e =
   let var_fold = function
      | (Var (x,_),_) -> [x]
      | (Fun (x,_,_,_),[vs]) -> remove x vs
-     | (Let (x,_,_,_,_), [vs1;vs2]) -> union vs1 (remove x vs2)
+     | (Let (x,_,_,_), [vs1;vs2]) -> union vs1 (remove x vs2)
      | (LetRec (x,_,_,_,_), [vs1;vs2]) -> remove x (union vs1 vs2)
      | (_,vs_list) -> List.fold_left union [] vs_list
   in postVisit var_fold e
@@ -255,18 +255,18 @@ let rec substitute (sigma : (string * (expr * string list)) list) =
            then let x' = free (union vs (var e)) in
                 Done (Fun (x',t,(substitute ((x,(Var (x',l), [x']))::sigma) e),l))
            else More
-     | Let (x,t,e1,e2,l)
+     | Let (x,e1,e2,l)
        -> let vs = varsImSigma sigma in
            if invars x vs || List.mem_assoc x sigma
            then let x' = free (union vs (var e2)) in
-                Done (Let (x',t,substitute sigma e1, (substitute ((x,(Var (x',l), [x']))::sigma) e2),l))
+                Done (Let (x',substitute sigma e1, (substitute ((x,(Var (x',l), [x']))::sigma) e2),l))
            else More
      | LetRec (x,t,e1,e2,l)
        -> let vs = varsImSigma sigma in
            if invars x vs || List.mem_assoc x sigma
            then let x' = free (union (union vs (var e1)) (var e2)) in
                 let sigma' = ((x,(Var (x',l), [x']))::sigma) in
-                Done (Let (x',t,substitute sigma' e1, substitute sigma' e2,l))
+                Done (LetRec (x',t,substitute sigma' e1, substitute sigma' e2,l))
            else More
      | _ -> More)
   (fun x -> x)
@@ -307,8 +307,8 @@ let string_of_expr e =
   | (Skip _, _) -> "()"
   | (Fun (x,t,_,_),[s]) -> 
     "(fun (" ^ x ^ ":" ^ string_of_tip t ^ ") -> " ^ s ^ ")"
-  | (Let (x,t,_,_,_),[s1;s2]) -> 
-    "(let " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
+  | (Let (x,_,_,_),[s1;s2]) -> 
+    "(let " ^ x ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
   | (LetRec (x,t,_,_,_),[s1;s2]) -> 
     "(let rec " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
   | (App _, [s1;s2]) -> 

@@ -70,10 +70,8 @@ let rec infertype (m:(string*tip) list) : expr -> tip = function
   | IntOfFloat _ -> TArrow(TFloat, TInt)
   | FloatOfInt _ -> TArrow(TInt, TFloat)
   | Fun (x,t,e,_) -> TArrow(t, infertype (update_or_add (x,t) m) e)
-  | Let (x,t,e1,e2,_) 
-    -> (match (infertype m e1, infertype (update_or_add (x,t) m) e2) with
-         | (t1,t2) when t1 = t -> t2
-         | (t1,_) -> raise (TypeError (e1,t,t1)))
+  | Let (x,e1,e2,_) 
+    -> let t = infertype m e1 in infertype (update_or_add (x,t) m) e2
   | LetRec (x,t,e1,e2,_) 
     -> let infertype' = infertype (update_or_add (x,t) m)
        in (match (infertype' e1, infertype' e2) with

@@ -159,8 +159,8 @@ expr:
                                { Fun ($3, $5, $8, location()) }
   | LET REC VAR COLON tip EQ expr IN expr %prec FUNX
                                { LetRec ($3, $5, $7, $9, location()) }
-  | LET VAR COLON tip EQ expr IN expr %prec FUNX
-                               { Let ($2, $4, $6, $8, location()) }
+  | LET VAR EQ expr IN expr %prec FUNX
+                               { Let ($2, $4, $6, location()) }
   | expr funexpr               { App ($1, $2, location()) }
   /* sometimes precedences are not enough so we must resort 
      to multiple non-terminals. Here we say that only certain expressions
