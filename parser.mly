@@ -38,6 +38,7 @@ let parseError loc = raise (Lexer.ParseError loc)
 %token REF
 %token TINT TBOOL TUNIT TFLOAT
 %token ARROW
+%token MATCH WITH INJL INJR PIPE
 %token EOF
 /* Precedence list.  One can think of it like this:  
    Reject a parse tree if two symbols in the list below occur one next to 
@@ -121,6 +122,7 @@ tip:
      element of the production (counting from 1) */
   | LPAREN tip RPAREN          { $2 }
   | tip REF                    { TRef $1 }  /* reference type */
+  | tip PLUS tip              { TSum ($1, $3) }
 
 expr:
   | expr PLUS expr             { Op ($1,Plus,$3, location()) }
@@ -168,6 +170,15 @@ expr:
   | funexpr                    { $1 }
   /* here we say that those expressions defined by funexps 
      are themselves expr */
+  | INJL funexpr COLON tip     { InjL($2, $4, location()) }
+  | INJR funexpr COLON tip     { InjR($2, $4, location()) }
+  | MATCH expr WITH 
+       INJL LPAREN VAR COLON tip RPAREN ARROW expr PIPE 
+       INJR LPAREN VAR COLON tip RPAREN ARROW expr
+                               { Match($2, Fun($6, $8, $11, location()),
+                                           Fun($15, $17, $20, location()), 
+                                           location()) }
+  /* For simplicity, the cases of match are encoded as function declarations */
   | error                      { parseError (location ()) }
 ;
 

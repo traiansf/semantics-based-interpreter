@@ -77,7 +77,7 @@ let rec infertype (m:(string*tip) list) : expr -> tip = function
        in (match (infertype' e1, infertype' e2) with
              | (t1,t2) when t1 = t -> t2
              | (t1,_) -> raise (TypeError (e1,t,t1)))
-  | e -> failwith ("Expression " ^ string_of_expr e ^ " not allowed in a program.")
+  | e -> failwith ("infertype: Don't know how to type the following expression:\n" ^ string_of_expr e)
 
 
 (** Type checks a program using the [infertype] function in the empty type 

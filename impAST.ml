@@ -50,6 +50,7 @@ type tip = TInt
                              represents type {i t1 -> t2}.  *)
   | TRef of tip (** [TRef t] represents the type associated to references to 
                     memory locations storing elements of type t *)
+  | TSum of tip * tip (** [TSum] encodes types associated to choices *)
 
 (** Generates the string corresponding to the given expression of type tip *)
 let rec string_of_tip = function
@@ -58,6 +59,7 @@ let rec string_of_tip = function
   | TBool -> "bool"
   | TUnit -> "unit"
   | TArrow (t1,t2) -> "(" ^ string_of_tip t1 ^ " -> " ^ string_of_tip t2 ^ ")"
+  | TSum (t1,t2) -> "(" ^ string_of_tip t1 ^ " + " ^ string_of_tip t2 ^ ")"
   | TRef t -> string_of_tip t ^ " ref"
 
 
@@ -83,6 +85,9 @@ type expr =                                    (** e ::= *)
   | Deref of expr * locatie                        (** | ! e *)
   | Atrib of expr * expr * locatie                 (** | e := e *)
   | Loc of int * locatie                           (** | l  {i as a value} *)
+  | InjL of expr * tip * locatie                   (** | InjL e : T *)
+  | InjR of expr * tip * locatie                   (** | InjR e : T *)
+  | Match of expr * expr * expr * locatie          (** | match e with ... *)
 
 (** Retrieves the file location component associated to the given expression *)
 let location = function
@@ -93,6 +98,7 @@ let location = function
   | Secv (_,_,l) | Skip l 
   | Var (_,l) | App (_,_,l) | Fun (_,_,_,l) | IntOfFloat l | FloatOfInt l
   | Let (_,_,_,l) | LetRec (_,_,_,_,l)
+  | InjL (_,_,l) | InjR (_,_,l) | Match (_,_,_,l)
   -> l
 
 (** Returns the list of (direct) subexpressions of a given expression *)
@@ -100,12 +106,12 @@ let exps : expr -> expr list  = function
  | IntOfFloat _ | FloatOfInt _ | Bool _ | Int _ | Float _ | Loc _
  | Var _ | Skip _ 
    -> []
- | Ref (e,_) | Deref (e,_) | Fun(_,_,e,_) 
+ | Ref (e,_) | Deref (e,_) | Fun(_,_,e,_) | InjL (e,_,_) | InjR (e,_,_)
    -> [e]
  | Atrib(e1,e2,_) | Op(e1,_,e2,_) | Secv(e1,e2,_) | While(e1,e2,_) 
  | App(e1,e2,_) | Let (_,e1,e2,_) | LetRec (_,_,e1,e2,_) 
    -> [e1;e2]
- | If(e1,e2,e3,_)
+ | If(e1,e2,e3,_) | Match(e1,e2,e3,_)
    -> [e1;e2;e3]
  | For(e1,e2,e3,e4,_)
    -> [e1;e2;e3;e4]
@@ -130,6 +136,9 @@ let revExps : expr * expr list -> expr = function
    | (LetRec(x,t,_,_,loc),[e1;e2]) -> LetRec(x,t,e1,e2,loc) 
    | (If(_,_,_,loc), [e1;e2;e3]) -> If(e1,e2,e3,loc)
    | (For(_,_,_,_,loc), [e1;e2;e3;e4]) -> For(e1,e2,e3,e4,loc)
+   | (InjL(_,t,loc),[e]) -> InjL(e,t,loc)
+   | (InjR(_,t,loc),[e]) -> InjR(e,t,loc)
+   | (Match(_,_,_,loc),[e1;e2;e3]) -> Match(e1,e2,e3,loc)
    | (e,_) ->  raise (MatchError ("ImpAST.revExps", location e))
 (** For example, 
     [revExps (Op(Int (3,l),Plus Var ("x",l)),  [Int(3,l);Int(7,l)]) =  
@@ -283,7 +292,7 @@ let subst (x:string) (ex:expr) (e:expr) : expr =
 (** Computes the string representation of an expression [e].  Uses
     [postVisit] which allows writing a function relying on the fact that 
     the string representations of subexpressions are already computed. *)
-let string_of_expr e = 
+let rec string_of_expr e = 
   let string_of_expr_fold = function
   | (IntOfFloat _,_) -> "int_of_float"
   | (FloatOfInt _,_) -> "float_of_int"
@@ -313,6 +322,14 @@ let string_of_expr e =
     "(let rec " ^ x ^ ":" ^ string_of_tip t ^ " = " ^ s1 ^ " in " ^ s2 ^ ")"
   | (App _, [s1;s2]) -> 
     " (" ^ s1 ^ s2 ^ ")"
+  | (InjL (_,t,_), [s]) -> "InjL (" ^ s ^ " : " ^ string_of_tip t ^ ")"
+  | (InjR (_,t,_), [s]) -> "InjR (" ^ s ^ " : " ^ string_of_tip t ^ ")"
+  | (Match (_,Fun(x,t,e,_),Fun(x',t',e',_),_), s::_) ->
+    "(match " ^ s ^ " with " ^ 
+        "InjL (" ^ x ^ ":" ^ string_of_tip t ^ ") -> " ^  string_of_expr e
+       ^ " | " ^
+        "InjR (" ^ x' ^ ":" ^ string_of_tip t' ^ ") -> " ^ string_of_expr e'
+       ^ ")"
   | _ ->  let (f,l,c,_,_) as loc = location e in 
              raise (MatchError ("ImpAST.string_of_expr", loc))
   in postVisit string_of_expr_fold e

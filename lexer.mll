@@ -70,6 +70,10 @@ let _ =
    ( "rec"          , REC );
    ( "in"           , IN );
    ( "ref"          , REF );
+   ( "match"        , MATCH );
+   ( "with"         , WITH );
+   ( "InjL"         , INJL );
+   ( "InjR"         , INJR );
 ]
 
 }
@@ -105,6 +109,7 @@ rule token = parse
   | ":="           { ASGNOP }
   | ":"            { COLON }
   | ';'            { SEQ }
+  | '|'            { PIPE }
  | '!'            { DEREF }
   (*  next is a list of non-keyword symbols we want our language to have *)
   | ['A'-'Z' 'a'-'z'] ['A'-'Z' 'a'-'z' '0'-'9' '_'] * as id
