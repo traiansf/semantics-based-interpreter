@@ -1,19 +1,24 @@
 
+OS := $(shell uname)
+ifneq (,$(findstring mingw,$(OS)))
+  OUT := imp.exe
+else
+  ifneq (,$(findstring MINGW,$(OS)))
+    OUT := imp.exe
+  else
+    ifneq (,$(findstring win,$(OS)))
+      OUT := imp.exe
+    else
+      ifneq (,$(findstring WIN,$(OS)))
+        OUT := imp.exe
+      else
+        OUT := imp
+      endif
+    endif
+  endif
+endif
 
-all: imp
-
-opt:
-	ocamlopt -c impAST.ml
-	ocamlyacc parser.mly
-	ocamlopt -c parser.mli
-	ocamllex lexer.mll
-	ocamlopt -c lexer.ml
-	ocamlopt -c parser.ml
-	ocamlopt -c mem.ml
-	ocamlopt -c semantics.ml
-	ocamlopt -c types.ml
-	ocamlopt -c imp.ml
-	ocamlopt -o imp-opt impAST.cmx lexer.cmx parser.cmx mem.cmx semantics.cmx types.cmx imp.cmx
+all: $(OUT)
 
 impAST.cmo : impAST.ml
 	ocamlc -c impAST.ml
@@ -45,9 +50,8 @@ semantics.cmo: semantics.ml mem.cmo impAST.cmo
 imp.cmo: imp.ml semantics.cmo types.cmo lexer.cmo
 	ocamlc -c imp.ml
 
-imp: impAST.cmo lexer.cmo parser.cmo imp.cmo mem.cmo semantics.cmo types.cmo
-	ocamlc -o imp impAST.cmo lexer.cmo parser.cmo mem.cmo semantics.cmo types.cmo imp.cmo
+$(OUT): impAST.cmo lexer.cmo parser.cmo imp.cmo mem.cmo semantics.cmo types.cmo
+	ocamlc -o $(OUT) impAST.cmo lexer.cmo parser.cmo mem.cmo semantics.cmo types.cmo imp.cmo
 
 clean:
-	rm -f lexer.ml parser.ml parser.mli *.cmo *.cmi imp
-	rm -f *.cmx *.o
+	rm -f lexer.ml parser.ml parser.mli *.cmo *.cmi $(OUT)
